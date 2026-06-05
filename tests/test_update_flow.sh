@@ -102,6 +102,21 @@ run_install --ext                                   # now the source differs
 assert_contains "changed --ext says relogin" "$OUT" "Log out/in to load"
 rm -rf "$SB"
 
+echo "== Makefile: targets map to the right commands =="
+cd "$REPO"
+assert_contains "bin -> install.sh --bin"        "$(make -n bin 2>&1)"       "scripts/install.sh --bin"
+assert_contains "ext -> install.sh --ext"        "$(make -n ext 2>&1)"       "scripts/install.sh --ext"
+assert_contains "update -> --bin --ext"          "$(make -n update 2>&1)"    "scripts/install.sh --bin --ext"
+assert_contains "install -> install.sh"          "$(make -n install 2>&1)"   "scripts/install.sh"
+assert_contains "uninstall -> uninstall.sh"      "$(make -n uninstall 2>&1)" "scripts/uninstall.sh"
+assert_contains "watch -> cargo watch"           "$(make -n watch 2>&1)"     "cargo watch -w src"
+assert_contains "watch guards cargo-watch"       "$(make -n watch 2>&1)"     "cargo install cargo-watch"
+assert_contains "check -> test suite"            "$(make -n check 2>&1)"     "tests/test_update_flow.sh"
+HELP="$(make help 2>&1)"
+assert_contains "help lists update"  "$HELP" "update"
+assert_contains "help lists watch"   "$HELP" "watch"
+assert_contains "default goal = help" "$(make 2>&1)" "update"
+
 echo ""
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
