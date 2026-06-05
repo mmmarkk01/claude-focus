@@ -1,0 +1,13 @@
+# Mode: "both", "focus-only", "notify-only"
+mode = "both"
+
+# Which notification types trigger action
+# Available: permission_prompt, idle_prompt, auth_success, elicitation_dialog
+notify_types = ["permission_prompt", "idle_prompt", "elicitation_dialog"]
+
+# Desktop notification timeout (ms)
+notification_timeout_ms = 5000
+
+# Sound alert
+play_sound = false
+sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
