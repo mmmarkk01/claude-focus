@@ -91,6 +91,17 @@ assert_eq       "unknown flag exits 1"     "$RC" "1"
 assert_contains "unknown flag warns"       "$OUT" "Unknown option"
 rm -rf "$SB"
 
+echo "== install.sh: --ext smart notice =="
+make_sandbox
+run_install --ext                                   # first install: files are new
+assert_contains "first --ext says relogin"   "$OUT" "Log out/in to load"
+run_install --ext                                   # second install: identical
+assert_contains "unchanged --ext says nothing to reload" "$OUT" "nothing to reload"
+echo "// changed" >> "$PROJECT_DIR/extension/extension.js"
+run_install --ext                                   # now the source differs
+assert_contains "changed --ext says relogin" "$OUT" "Log out/in to load"
+rm -rf "$SB"
+
 echo ""
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

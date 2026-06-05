@@ -23,8 +23,19 @@ do_bin() {
 do_ext() {
     echo "==> Installing GNOME Shell extension..."
     mkdir -p "$EXT_DIR"
+    local changed=0 f
+    for f in metadata.json extension.js; do
+        if [ ! -f "$EXT_DIR/$f" ] || ! cmp -s "$PROJECT_DIR/extension/$f" "$EXT_DIR/$f"; then
+            changed=1
+        fi
+    done
     cp "$PROJECT_DIR/extension/metadata.json" "$EXT_DIR/"
     cp "$PROJECT_DIR/extension/extension.js" "$EXT_DIR/"
+    if [ "$changed" -eq 1 ]; then
+        echo "    Log out/in to load the updated extension."
+    else
+        echo "    Extension unchanged — nothing to reload."
+    fi
 }
 
 do_config() {
