@@ -117,6 +117,12 @@ assert_contains "help lists update"  "$HELP" "update"
 assert_contains "help lists watch"   "$HELP" "watch"
 assert_contains "default goal = help" "$(make 2>&1)" "update"
 
+echo "== README documents the update flow =="
+READ="$(cat "$REPO/README.md")"
+assert_contains "README has an Updating section" "$READ" "## Updating"
+assert_contains "README documents make update"   "$READ" "make update"
+assert_contains "README documents make watch"    "$READ" "make watch"
+
 echo ""
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
