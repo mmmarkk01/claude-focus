@@ -92,14 +92,38 @@ print_full_summary() {
     echo "      Desktop notifications work immediately."
 }
 
+usage() {
+    cat <<'EOF'
+Usage: install.sh [--bin] [--ext]
+
+  (no flags)   Full install: build + binary + extension + config + hook + enable
+  --bin        Rebuild and reinstall the binary only (live immediately)
+  --ext        Reinstall the GNOME extension only (relogin notice if it changed)
+  -h, --help   Show this help
+
+Env overrides (testing): PROJECT_DIR BIN_DIR EXT_DIR CONFIG_DIR SETTINGS_FILE
+EOF
+}
+
 main() {
-    do_build
-    do_bin
-    do_ext
-    do_config
-    do_hook
-    do_enable
-    print_full_summary
+    local want_bin=0 want_ext=0 do_all=1
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --bin) want_bin=1; do_all=0 ;;
+            --ext) want_ext=1; do_all=0 ;;
+            -h|--help) usage; exit 0 ;;
+            *) echo "Unknown option: $1" >&2; echo >&2; usage >&2; exit 1 ;;
+        esac
+        shift
+    done
+
+    if [ "$do_all" -eq 1 ]; then
+        do_build; do_bin; do_ext; do_config; do_hook; do_enable
+        print_full_summary
+    else
+        if [ "$want_bin" -eq 1 ]; then do_build; do_bin; fi
+        if [ "$want_ext" -eq 1 ]; then do_ext; fi
+    fi
 }
 
 main "$@"

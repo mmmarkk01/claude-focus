@@ -49,6 +49,48 @@ assert_present  "full install writes settings"       "$SETTINGS_FILE"
 assert_contains "settings reference the hook path"   "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
 rm -rf "$SB"
 
+echo "== install.sh: --bin (binary only) =="
+make_sandbox
+run_install --bin
+assert_eq      "--bin exits 0"            "$RC" "0"
+assert_present "--bin installs binary"     "$BIN_DIR/claude-focus"
+assert_absent  "--bin skips extension"     "$EXT_DIR/extension.js"
+assert_absent  "--bin skips config"        "$CONFIG_DIR/config.toml"
+assert_absent  "--bin skips settings"      "$SETTINGS_FILE"
+rm -rf "$SB"
+
+echo "== install.sh: --ext (extension only) =="
+make_sandbox
+run_install --ext
+assert_eq      "--ext exits 0"             "$RC" "0"
+assert_present "--ext installs extension"   "$EXT_DIR/extension.js"
+assert_absent  "--ext skips binary"         "$BIN_DIR/claude-focus"
+assert_absent  "--ext skips config"         "$CONFIG_DIR/config.toml"
+rm -rf "$SB"
+
+echo "== install.sh: --bin --ext (combined) =="
+make_sandbox
+run_install --bin --ext
+assert_present "combo installs binary"      "$BIN_DIR/claude-focus"
+assert_present "combo installs extension"   "$EXT_DIR/extension.js"
+assert_absent  "combo skips config"         "$CONFIG_DIR/config.toml"
+rm -rf "$SB"
+
+echo "== install.sh: --help =="
+make_sandbox
+run_install --help
+assert_eq       "--help exits 0"           "$RC" "0"
+assert_contains "--help prints usage"      "$OUT" "Usage:"
+assert_absent   "--help installs nothing"  "$BIN_DIR/claude-focus"
+rm -rf "$SB"
+
+echo "== install.sh: unknown flag =="
+make_sandbox
+run_install --nope
+assert_eq       "unknown flag exits 1"     "$RC" "1"
+assert_contains "unknown flag warns"       "$OUT" "Unknown option"
+rm -rf "$SB"
+
 echo ""
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
