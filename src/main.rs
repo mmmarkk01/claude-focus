@@ -140,7 +140,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    dispatch(notification_type, message, hook_input.cwd.as_deref(), &config, false);
+    dispatch(
+        notification_type,
+        message,
+        hook_input.cwd.as_deref(),
+        &config,
+        false,
+    );
 
     Ok(())
 }
