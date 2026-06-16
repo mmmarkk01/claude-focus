@@ -3,6 +3,15 @@ use std::process::{Command, Stdio};
 
 use crate::config::Config;
 
+/// notify-send urgency. `critical` cuts through and persists (GNOME ignores the
+/// expire-time for it), used for permission prompts; everything else is `normal`.
+fn urgency_for(notification_type: &str) -> &'static str {
+    match notification_type {
+        "permission_prompt" => "critical",
+        _ => "normal",
+    }
+}
+
 pub fn send_notification(
     notification_type: &str,
     message: &str,
@@ -30,8 +39,9 @@ pub fn send_notification(
 
     let timeout_ms = config.notification_timeout_ms.to_string();
 
+    let urgency = urgency_for(notification_type);
     let mut args = vec![
-        "--urgency", "normal",
+        "--urgency", urgency,
         "--expire-time", &timeout_ms,
         "--app-name", "Claude Code",
     ];
@@ -63,5 +73,22 @@ pub fn send_notification(
                 .stderr(Stdio::null())
                 .spawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn permission_is_critical() {
+        assert_eq!(urgency_for("permission_prompt"), "critical");
+    }
+
+    #[test]
+    fn other_types_are_normal() {
+        assert_eq!(urgency_for("idle_prompt"), "normal");
+        assert_eq!(urgency_for("elicitation_dialog"), "normal");
+        assert_eq!(urgency_for(""), "normal");
     }
 }
