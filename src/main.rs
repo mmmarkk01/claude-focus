@@ -23,10 +23,69 @@ struct HookInput {
 }
 
 fn main() {
-    // Always exit 0 — never block Claude Code
-    if let Err(e) = run() {
+    // Always exit 0 — never block Claude Code.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let result = match parse_args(&args) {
+        Command::Hook => run(),
+        Command::Version => {
+            println!("claude-focus {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        Command::Test(t) => run_test(t.as_deref()),
+        Command::Doctor => run_doctor(),
+        Command::Help => {
+            print_help();
+            Ok(())
+        }
+    };
+    if let Err(e) = result {
         eprintln!("claude-focus: {e}");
     }
+}
+
+#[derive(Debug)]
+enum Command {
+    Hook,
+    Version,
+    Test(Option<String>),
+    Doctor,
+    Help,
+}
+
+/// Parse CLI args (already stripped of argv[0]). No args (or `hook`) preserves
+/// the stdin-hook contract Claude Code relies on; anything unknown shows help
+/// rather than blocking on stdin.
+fn parse_args(args: &[String]) -> Command {
+    match args.first().map(|s| s.as_str()) {
+        None | Some("hook") => Command::Hook,
+        Some("--version") | Some("-V") => Command::Version,
+        Some("doctor") => Command::Doctor,
+        Some("test") => Command::Test(args.get(1).cloned()),
+        Some("--help") | Some("-h") => Command::Help,
+        Some(_) => Command::Help,
+    }
+}
+
+fn print_help() {
+    eprintln!(
+        "claude-focus {}\n\n\
+         Usage:\n  \
+         claude-focus            Run as a Claude Code Notification hook (reads JSON on stdin)\n  \
+         claude-focus test [t]   Fire synthetic notification(s) through the real focus+notify path\n  \
+         claude-focus doctor     Check deps, config, extension, and hook registration\n  \
+         claude-focus --version  Print version",
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
+fn run_test(_which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    eprintln!("claude-focus: `test` not yet implemented");
+    Ok(())
+}
+
+fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
+    eprintln!("claude-focus: `doctor` not yet implemented");
+    Ok(())
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -99,5 +158,34 @@ mod tests {
     #[test]
     fn empty_type_acts_only_if_explicitly_listed() {
         assert!(should_act("", &[String::new()]));
+    }
+
+    #[test]
+    fn no_args_is_hook() {
+        assert!(matches!(parse_args(&[]), Command::Hook));
+    }
+
+    #[test]
+    fn version_flag_parses() {
+        assert!(matches!(parse_args(&["--version".to_string()]), Command::Version));
+        assert!(matches!(parse_args(&["-V".to_string()]), Command::Version));
+    }
+
+    #[test]
+    fn doctor_parses() {
+        assert!(matches!(parse_args(&["doctor".to_string()]), Command::Doctor));
+    }
+
+    #[test]
+    fn test_with_type_parses() {
+        match parse_args(&["test".to_string(), "idle_prompt".to_string()]) {
+            Command::Test(Some(t)) => assert_eq!(t, "idle_prompt"),
+            other => panic!("expected Test(Some), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_without_type_parses() {
+        assert!(matches!(parse_args(&["test".to_string()]), Command::Test(None)));
     }
 }
