@@ -61,18 +61,91 @@ impl Default for Config {
     }
 }
 
+/// Parse config from a TOML string. On a parse error, print the error (which
+/// carries line/column) to stderr and fall back to defaults — never panic,
+/// never silently discard config without a signal.
+pub fn parse_config_or_default(contents: &str) -> Config {
+    match toml::from_str(contents) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!(
+                "claude-focus: invalid config at {}, using defaults: {e}",
+                config_path().display()
+            );
+            Config::default()
+        }
+    }
+}
+
 pub fn load_config() -> Config {
     let path = config_path();
     match std::fs::read_to_string(&path) {
-        Ok(contents) => toml::from_str(&contents).unwrap_or_default(),
+        Ok(contents) => parse_config_or_default(&contents),
         Err(_) => Config::default(),
     }
 }
 
 fn config_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home".into());
-    PathBuf::from(home)
-        .join(".config")
-        .join("claude-focus")
-        .join("config.toml")
+    let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+    config_path_from(&home, xdg.as_deref())
+}
+
+/// Resolve the config path. XDG_CONFIG_HOME wins only when set AND non-empty
+/// (the XDG spec treats empty as unset; Rust's env::var returns Ok("") for an
+/// empty var, so we must guard explicitly). Otherwise fall back to $HOME/.config.
+fn config_path_from(home: &str, xdg: Option<&str>) -> PathBuf {
+    let base = match xdg {
+        Some(x) if !x.is_empty() => PathBuf::from(x),
+        _ => PathBuf::from(home).join(".config"),
+    };
+    base.join("claude-focus").join("config.toml")
+}
+
+/// Public accessor for the resolved config path (used by `doctor`).
+pub fn public_config_path() -> PathBuf {
+    config_path()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_config_parses() {
+        let cfg = parse_config_or_default("mode = \"notify-only\"\n");
+        assert_eq!(cfg.mode, Mode::NotifyOnly);
+    }
+
+    #[test]
+    fn invalid_config_falls_back_to_defaults() {
+        // A broken table header must yield defaults, never a panic.
+        let cfg = parse_config_or_default("mode = \"notify-only\"\n[ broken");
+        assert_eq!(cfg.mode, Mode::default()); // Mode::Both
+    }
+
+    #[test]
+    fn xdg_set_nonempty_wins() {
+        assert_eq!(
+            config_path_from("/home/u", Some("/cfg")),
+            std::path::PathBuf::from("/cfg/claude-focus/config.toml")
+        );
+    }
+
+    #[test]
+    fn xdg_empty_falls_back_to_home() {
+        // Per the XDG spec, an empty value means "unset".
+        assert_eq!(
+            config_path_from("/home/u", Some("")),
+            std::path::PathBuf::from("/home/u/.config/claude-focus/config.toml")
+        );
+    }
+
+    #[test]
+    fn xdg_unset_falls_back_to_home() {
+        assert_eq!(
+            config_path_from("/home/u", None),
+            std::path::PathBuf::from("/home/u/.config/claude-focus/config.toml")
+        );
+    }
 }
