@@ -53,7 +53,7 @@ do_hook() {
     echo "==> Merging hook into Claude Code settings..."
     mkdir -p "$(dirname "$SETTINGS_FILE")"
     SETTINGS_FILE="$SETTINGS_FILE" BIN_DIR="$BIN_DIR" python3 - <<'PY'
-import json, os, tempfile
+import json, os, stat, tempfile
 settings_file = os.environ['SETTINGS_FILE']
 hook_command = os.path.join(os.environ['BIN_DIR'], 'claude-focus')
 
@@ -67,6 +67,12 @@ if os.path.exists(settings_file):
             "    ERROR: %s is not valid JSON (%s).\n"
             "    Fix it or back it up, then re-run install. Left it untouched."
             % (settings_file, e)
+        )
+    if not isinstance(settings, dict):
+        raise SystemExit(
+            "    ERROR: %s is valid JSON but not a JSON object.\n"
+            "    Fix it or back it up, then re-run install. Left it untouched."
+            % settings_file
         )
 
 hook_entry = {'matcher': '*', 'hooks': [{'type': 'command', 'command': hook_command}]}
@@ -87,6 +93,10 @@ else:
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(settings, f, indent=2)
+        # mkstemp creates 0600; preserve the original file's mode so the merge
+        # doesn't silently downgrade an existing settings.json's permissions.
+        if os.path.exists(settings_file):
+            os.chmod(tmp, stat.S_IMODE(os.stat(settings_file).st_mode))
         os.replace(tmp, settings_file)
     except BaseException:
         if os.path.exists(tmp):
