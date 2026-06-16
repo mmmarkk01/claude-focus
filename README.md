@@ -111,7 +111,7 @@ gdbus introspect --session \
 Already installed and just want your local changes live? The two artifacts update very differently:
 
 - **The binary** (`src/*.rs`) hot-swaps instantly — the Notification hook spawns a fresh process on every event, so a rebuilt binary is used on the very next notification. No restart.
-- **The GNOME extension** (`extension.js`) needs GNOME Shell to reload it. On **Wayland** that means **log out and back in** (`Alt+F2 → r` is X11-only). The tooling only nags you to relogin when the extension actually changed.
+- **The GNOME extension** (`extension.js`) needs GNOME Shell to reload it. On **Wayland** that means **log out and back in** (`Alt+F2 → r` is X11-only). The tooling only nags you to log back in when the extension actually changed.
 
 A `Makefile` wraps `scripts/install.sh` with granular targets:
 
@@ -119,7 +119,7 @@ A `Makefile` wraps `scripts/install.sh` with granular targets:
 |---|---|---|
 | `make update` | rebuild + reinstall binary **and** extension | everyday "deploy what I changed" |
 | `make bin` | rebuild + reinstall the binary only | the common Rust change — live instantly |
-| `make ext` | reinstall the extension only | changed `extension.js` (prints relogin notice if needed) |
+| `make ext` | reinstall the extension only | changed `extension.js` (prints log-out/in notice if needed) |
 | `make install` | full install (binary + extension + config + hook + enable) | first-time setup |
 | `make watch` | auto-rebuild + reinstall the binary on every source save | tight inner loop (needs `cargo install cargo-watch`) |
 | `make uninstall` | remove everything (config preserved) | |

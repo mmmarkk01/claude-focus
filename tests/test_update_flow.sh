@@ -103,7 +103,7 @@ assert_contains "changed --ext says relogin" "$OUT" "Log out/in to load"
 rm -rf "$SB"
 
 echo "== Makefile: targets map to the right commands =="
-cd "$REPO"
+cd "$REPO" || exit
 assert_contains "bin -> install.sh --bin"        "$(make -n bin 2>&1)"       "scripts/install.sh --bin"
 assert_contains "ext -> install.sh --ext"        "$(make -n ext 2>&1)"       "scripts/install.sh --ext"
 assert_contains "update -> --bin --ext"          "$(make -n update 2>&1)"    "scripts/install.sh --bin --ext"
