@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${PROJECT_DIR:-$(dirname "$SCRIPT_DIR")}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 EXT_DIR="${EXT_DIR:-$HOME/.local/share/gnome-shell/extensions/focus-by-pid@claude.local}"
-CONFIG_DIR="${CONFIG_DIR:-$HOME/.config/claude-focus}"
+CONFIG_DIR="${CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/claude-focus}"
 SETTINGS_FILE="${SETTINGS_FILE:-$HOME/.claude/settings.json}"
 
 do_build() {
