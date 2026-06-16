@@ -102,6 +102,27 @@ run_install --ext                                   # now the source differs
 assert_contains "changed --ext says relogin" "$OUT" "Log out/in to load"
 rm -rf "$SB"
 
+echo "== install.sh: malformed settings.json fails loudly, leaves file intact =="
+make_sandbox
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+printf '{ this is not valid json ' > "$SETTINGS_FILE"
+before="$(cat "$SETTINGS_FILE")"
+run_install
+assert_eq       "malformed settings aborts nonzero"  "$RC" "1"
+assert_contains "malformed settings explains why"    "$OUT" "not valid JSON"
+assert_eq       "malformed settings left intact"     "$(cat "$SETTINGS_FILE")" "$before"
+rm -rf "$SB"
+
+echo "== install.sh: merges into existing valid settings, preserving keys =="
+make_sandbox
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+printf '{"otherKey": 42}' > "$SETTINGS_FILE"
+run_install
+assert_eq       "merge exits 0"                "$RC" "0"
+assert_contains "merge preserves existing key" "$(cat "$SETTINGS_FILE")" "otherKey"
+assert_contains "merge adds hook"              "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
+rm -rf "$SB"
+
 echo "== Makefile: targets map to the right commands =="
 cd "$REPO" || exit
 assert_contains "bin -> install.sh --bin"        "$(make -n bin 2>&1)"       "scripts/install.sh --bin"

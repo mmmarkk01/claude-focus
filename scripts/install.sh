@@ -53,15 +53,21 @@ do_hook() {
     echo "==> Merging hook into Claude Code settings..."
     mkdir -p "$(dirname "$SETTINGS_FILE")"
     SETTINGS_FILE="$SETTINGS_FILE" BIN_DIR="$BIN_DIR" python3 - <<'PY'
-import json, os
+import json, os, tempfile
 settings_file = os.environ['SETTINGS_FILE']
 hook_command = os.path.join(os.environ['BIN_DIR'], 'claude-focus')
 
+settings = {}
 if os.path.exists(settings_file):
-    with open(settings_file) as f:
-        settings = json.load(f)
-else:
-    settings = {}
+    try:
+        with open(settings_file) as f:
+            settings = json.load(f)
+    except (ValueError, OSError) as e:
+        raise SystemExit(
+            "    ERROR: %s is not valid JSON (%s).\n"
+            "    Fix it or back it up, then re-run install. Left it untouched."
+            % (settings_file, e)
+        )
 
 hook_entry = {'matcher': '*', 'hooks': [{'type': 'command', 'command': hook_command}]}
 hooks = settings.setdefault('hooks', {})
@@ -70,13 +76,23 @@ already_present = any(
     any(h.get('command') == hook_command for h in entry.get('hooks', []))
     for entry in notifications
 )
-if not already_present:
-    notifications.append(hook_entry)
-    with open(settings_file, 'w') as f:
-        json.dump(settings, f, indent=2)
-    print('    Hook added to', settings_file)
-else:
+if already_present:
     print('    Hook already present, skipping')
+else:
+    notifications.append(hook_entry)
+    # Atomic write: temp file in the same dir + os.replace, so a crash never
+    # truncates the user's Claude settings.
+    d = os.path.dirname(settings_file) or '.'
+    fd, tmp = tempfile.mkstemp(dir=d, prefix='.settings.', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(settings, f, indent=2)
+        os.replace(tmp, settings_file)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    print('    Hook added to', settings_file)
 PY
 }
 
