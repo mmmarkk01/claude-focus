@@ -6,7 +6,7 @@ Auto-focus your terminal and play a sound alert when Claude Code needs your atte
 
 When Claude Code needs input — a permission prompt, a question, or it's waiting idle — **claude-focus** will:
 
-1. **Send a desktop notification** with a contextual title (e.g. "Permission Required", "Ready for Input")
+1. **Send a desktop notification** with a contextual title that includes the project directory (e.g. "Claude Code — Permission Required · my-project"), so you can tell which session needs attention when several are running
 2. **Play a sound alert** so you hear it even if your screen is off or you're looking elsewhere
 3. **Bring the terminal to the foreground** (auto-focus, requires GNOME Shell extension — see below)
 
@@ -224,7 +224,7 @@ sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
 | `notification_timeout_ms` | Integer (ms) | `5000` | How long the desktop notification stays visible |
 | `play_sound` | `true` / `false` | `false` | Whether to play an audio alert |
 | `sound_file` | File path | `bell.oga` | Path to the `.oga` sound file |
-| `quiet_hours` | `"HH:MM-HH:MM"` or unset | unset | Suppress banner + sound during this local-time window (auto-focus still runs); may wrap past midnight |
+| `quiet_hours` | `"HH:MM-HH:MM"` or unset | unset | Suppress banner + sound during this local-time window (auto-focus still runs, when `mode` includes focus); may wrap past midnight |
 
 ### Notification Types
 
@@ -234,6 +234,8 @@ sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
 | `idle_prompt` | Claude Code has finished and is waiting for your next message |
 | `elicitation_dialog` | Claude Code is asking you a question |
 | `auth_success` | Authentication completed |
+
+Permission prompts fire as **critical** (persistent) notifications so they cut through; the other types fire as **normal**.
 
 ### Available Sounds
 
@@ -281,7 +283,7 @@ This removes the binary, GNOME extension, and hook from Claude Code settings. Yo
 
 **No notification popup?**
 - Test `notify-send` directly: `notify-send "Test" "Hello"`
-- claude-focus **respects** GNOME Do Not Disturb: while DND is on, banners and sound are suppressed (auto-focus still works). Turn DND off, or check `quiet_hours` in your config, if you expect a banner and see none.
+- claude-focus **respects** GNOME Do Not Disturb: while DND is on, banners and sound are suppressed (auto-focus still works, when `mode` includes focus). Turn DND off, or check `quiet_hours` in your config, if you expect a banner and see none.
 
 **Auto-focus not working?**
 - Log out and back in after installing (required to load the GNOME Shell extension)
