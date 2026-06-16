@@ -106,6 +106,32 @@ do_enable() {
     fi
 }
 
+preflight() {
+    echo "==> Checking dependencies..."
+    local missing_hard=0 dep pkg
+    if ! command -v cargo &>/dev/null; then
+        echo "    [FAIL] cargo not found — install Rust: https://rustup.rs" >&2
+        missing_hard=1
+    fi
+    for dep in notify-send gdbus pw-play; do
+        if ! command -v "$dep" &>/dev/null; then
+            case "$dep" in
+                notify-send) pkg="libnotify-bin" ;;
+                gdbus)       pkg="libglib2.0-bin" ;;
+                pw-play)     pkg="pipewire-bin (or set play_sound=false)" ;;
+            esac
+            echo "    [warn] $dep not found — sudo apt install $pkg"
+        fi
+    done
+    if [ "${XDG_SESSION_TYPE:-}" != "wayland" ] || ! printf '%s' "${XDG_CURRENT_DESKTOP:-}" | grep -qi gnome; then
+        echo "    [warn] auto-focus needs GNOME/Wayland; desktop notifications still work elsewhere"
+    fi
+    if [ "$missing_hard" -eq 1 ]; then
+        echo "    Aborting: install the hard requirement(s) above and re-run." >&2
+        exit 1
+    fi
+}
+
 print_full_summary() {
     echo ""
     echo "Installation complete!"
@@ -145,6 +171,7 @@ main() {
     done
 
     if [ "$do_all" -eq 1 ]; then
+        preflight
         do_build; do_bin; do_ext; do_config; do_hook; do_enable
         print_full_summary
     else

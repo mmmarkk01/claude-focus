@@ -123,6 +123,24 @@ assert_contains "merge preserves existing key" "$(cat "$SETTINGS_FILE")" "otherK
 assert_contains "merge adds hook"              "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
 rm -rf "$SB"
 
+echo "== install.sh: preflight hard-fails when cargo is missing =="
+make_sandbox
+# Build a clean PATH with the real tools install.sh needs but deliberately NO
+# cargo — independent of where the real cargo lives. type -P bypasses any shell
+# function/alias so the symlinks resolve to actual binaries.
+CLEAN="$SB/cleanbin"; mkdir -p "$CLEAN"
+for t in bash env sh dirname cp mkdir chmod cmp python3 grep cat mktemp rm; do
+  p="$(type -P "$t" 2>/dev/null || true)"; [ -n "$p" ] && ln -sf "$p" "$CLEAN/$t"
+done
+cp "$SB/fakebin/gnome-extensions" "$CLEAN/gnome-extensions"   # present; NB: no cargo
+OUT="$(PATH="$CLEAN" PROJECT_DIR="$PROJECT_DIR" BIN_DIR="$BIN_DIR" \
+       EXT_DIR="$EXT_DIR" CONFIG_DIR="$CONFIG_DIR" SETTINGS_FILE="$SETTINGS_FILE" \
+       bash "$INSTALL" 2>&1)"; RC=$?
+assert_eq       "missing cargo exits 1"        "$RC" "1"
+assert_contains "missing cargo names rustup"   "$OUT" "rustup"
+assert_absent   "missing cargo builds nothing" "$BIN_DIR/claude-focus"
+rm -rf "$SB"
+
 echo "== Makefile: targets map to the right commands =="
 cd "$REPO" || exit
 assert_contains "bin -> install.sh --bin"        "$(make -n bin 2>&1)"       "scripts/install.sh --bin"
