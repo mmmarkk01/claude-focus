@@ -83,15 +83,24 @@ fn now_minutes() -> Option<u32> {
 
 /// Whether the *noisy* legs (banner + sound) should be suppressed right now:
 /// GNOME DND on, OR inside the configured quiet-hours window. Focus is NOT
-/// gated by this.
+/// gated by this. `date` is only spawned when a quiet-hours window is actually
+/// configured (the common case is unset → no extra subprocess on the hot path).
 fn notifications_silenced(config: &Config) -> bool {
     if gnome_dnd_active() {
         return true;
     }
-    match (config.quiet_hours.as_deref(), now_minutes()) {
-        (Some(window), Some(now)) => in_quiet_hours(Some(window), now),
-        _ => false,
+    match config.quiet_hours.as_deref() {
+        Some(window) => now_minutes()
+            .map(|now| in_quiet_hours(Some(window), now))
+            .unwrap_or(false),
+        None => false,
     }
+}
+
+/// Whether to skip the noisy legs: suppress only when not forced AND silenced.
+/// `test` (force) always notifies. Pure, for testing the bypass semantics.
+fn should_suppress(force: bool, silenced: bool) -> bool {
+    !force && silenced
 }
 
 pub fn send_notification(
@@ -104,7 +113,7 @@ pub fn send_notification(
     // Respect DND / quiet hours for the noisy legs. `test` (force) bypasses so
     // diagnostics always show a banner. Auto-focus is unaffected (it lives in
     // main::dispatch).
-    if !force && notifications_silenced(config) {
+    if should_suppress(force, notifications_silenced(config)) {
         return;
     }
 
@@ -235,5 +244,18 @@ mod tests {
         assert!(!in_quiet_hours(Some("nonsense"), 720));
         assert!(!in_quiet_hours(Some("25:00-26:00"), 720));
         assert!(!in_quiet_hours(Some("22:00"), 720)); // no dash
+    }
+
+    #[test]
+    fn force_always_notifies() {
+        // `test` (force=true) bypasses the silence gate regardless of DND/quiet.
+        assert!(!should_suppress(true, true));
+        assert!(!should_suppress(true, false));
+    }
+
+    #[test]
+    fn hook_path_suppresses_only_when_silenced() {
+        assert!(should_suppress(false, true)); // DND/quiet hours -> suppress
+        assert!(!should_suppress(false, false)); // normal -> notify
     }
 }
