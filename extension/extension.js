@@ -89,10 +89,15 @@ export default class FocusByPidExtension {
         const workspace = win.get_workspace();
         const activeWorkspace = global.workspace_manager.get_active_workspace();
 
+        // Switch workspace first only if the window lives on another one...
         if (workspace && workspace !== activeWorkspace) {
             workspace.activate(global.get_current_time());
-            Main.activateWindow(win);
         }
+        // ...then ALWAYS raise/activate it. Previously this was inside the
+        // cross-workspace branch, so a same-workspace window got a border but
+        // was never raised (contradicting the README). ActivateByPid already
+        // calls activateWindow unconditionally — this mirrors it.
+        Main.activateWindow(win);
 
         this._highlightWindow(win, duration_ms || 3000);
         return true;
