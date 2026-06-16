@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build · test · lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Unit + integration tests
+        run: cargo test
+
+      - name: Smoke test — release binary exits 0 on a payload
+        run: |
+          payload='{"notification_type":"permission_prompt","message":"ci smoke"}'
+          # Empty PATH so the fire-and-forget focus/notify spawns are no-ops;
+          # the binary is invoked by relative path, so it still execs.
+          echo "$payload" | PATH= ./target/release/claude-focus
+          echo "permission_prompt payload exited 0"
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Shellcheck scripts
+        run: shellcheck scripts/*.sh
+
+  version-bump:
+    name: extension version bump
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch PR base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "$BASE_REF"
+
+      - name: Enforce metadata.json bump when extension.js changes
+        run: scripts/check-extension-version.sh FETCH_HEAD

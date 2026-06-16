@@ -108,25 +108,43 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 "sound file exists",
                 "set sound_file to a real path or play_sound=false",
             ),
-            None => line(false, "sound file set", "set sound_file or play_sound=false"),
+            None => line(
+                false,
+                "sound file set",
+                "set sound_file or play_sound=false",
+            ),
         }
     }
 
     // Dependencies on PATH.
     let gdbus = on_path("gdbus");
-    line(on_path("notify-send"), "notify-send on PATH", "install libnotify-bin");
-    line(on_path("pw-play"), "pw-play on PATH", "install pipewire-bin (or set play_sound=false)");
+    line(
+        on_path("notify-send"),
+        "notify-send on PATH",
+        "install libnotify-bin",
+    );
+    line(
+        on_path("pw-play"),
+        "pw-play on PATH",
+        "install pipewire-bin (or set play_sound=false)",
+    );
     line(gdbus, "gdbus on PATH", "install libglib2.0-bin");
 
     // D-Bus service owned (depends on gdbus; report once).
     if gdbus {
-        line(dbus_name_owned(), "FocusByPid D-Bus service owned",
-             "log out/in or restart GNOME Shell to load the extension");
+        line(
+            dbus_name_owned(),
+            "FocusByPid D-Bus service owned",
+            "log out/in or restart GNOME Shell to load the extension",
+        );
     }
 
     // Extension enabled.
-    line(extension_enabled(), "extension enabled",
-         "gnome-extensions enable focus-by-pid@claude.local");
+    line(
+        extension_enabled(),
+        "extension enabled",
+        "gnome-extensions enable focus-by-pid@claude.local",
+    );
 
     // Hook registered (exact match to install.sh; tolerant of malformed JSON).
     let home = std::env::var("HOME").unwrap_or_default();
@@ -135,10 +153,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     match std::fs::read_to_string(&settings) {
         Ok(s) => match hook_registered(&s, &expected_command) {
             Ok(true) => line(true, "hook registered in settings.json", ""),
-            Ok(false) => line(false, "hook registered in settings.json", "re-run scripts/install.sh"),
+            Ok(false) => line(
+                false,
+                "hook registered in settings.json",
+                "re-run scripts/install.sh",
+            ),
             Err(e) => line(false, "settings.json parses", &e),
         },
-        Err(_) => line(false, "hook registered in settings.json", "run scripts/install.sh"),
+        Err(_) => line(
+            false,
+            "hook registered in settings.json",
+            "run scripts/install.sh",
+        ),
     }
 
     Ok(())

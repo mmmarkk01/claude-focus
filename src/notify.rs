@@ -142,9 +142,12 @@ pub fn send_notification(
 
     let urgency = urgency_for(notification_type);
     let mut args = vec![
-        "--urgency", urgency,
-        "--expire-time", &timeout_ms,
-        "--app-name", "Claude Code",
+        "--urgency",
+        urgency,
+        "--expire-time",
+        &timeout_ms,
+        "--app-name",
+        "Claude Code",
     ];
 
     args.push(&title);
