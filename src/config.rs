@@ -102,6 +102,11 @@ fn config_path_from(home: &str, xdg: Option<&str>) -> PathBuf {
     base.join("claude-focus").join("config.toml")
 }
 
+/// Public accessor for the resolved config path (used by `doctor`).
+pub fn public_config_path() -> PathBuf {
+    config_path()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,6 @@
 mod config;
 mod dbus;
+mod doctor;
 mod notify;
 mod process_tree;
 
@@ -119,8 +120,7 @@ fn run_test(which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("claude-focus: `doctor` not yet implemented");
-    Ok(())
+    doctor::run()
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
