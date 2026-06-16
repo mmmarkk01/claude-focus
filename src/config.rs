@@ -1,18 +1,13 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum Mode {
+    #[default]
     Both,
     FocusOnly,
     NotifyOnly,
-}
-
-impl Default for Mode {
-    fn default() -> Self {
-        Mode::Both
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +26,9 @@ pub struct Config {
 
     #[serde(default = "default_sound_file")]
     pub sound_file: Option<String>,
+
+    #[serde(default)]
+    pub quiet_hours: Option<String>,
 }
 
 fn default_notify_types() -> Vec<String> {
@@ -57,6 +55,7 @@ impl Default for Config {
             notification_timeout_ms: default_timeout(),
             play_sound: false,
             sound_file: default_sound_file(),
+            quiet_hours: None,
         }
     }
 }
@@ -147,5 +146,17 @@ mod tests {
             config_path_from("/home/u", None),
             std::path::PathBuf::from("/home/u/.config/claude-focus/config.toml")
         );
+    }
+
+    #[test]
+    fn quiet_hours_parses_when_present() {
+        let cfg = parse_config_or_default("quiet_hours = \"22:00-08:00\"\n");
+        assert_eq!(cfg.quiet_hours.as_deref(), Some("22:00-08:00"));
+    }
+
+    #[test]
+    fn quiet_hours_defaults_to_none() {
+        let cfg = parse_config_or_default("");
+        assert_eq!(cfg.quiet_hours, None);
     }
 }

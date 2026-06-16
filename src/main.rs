@@ -105,6 +105,9 @@ fn test_plan(which: Option<&str>, notify_types: &[String]) -> Vec<(String, bool)
 /// starts from this process).
 fn run_test(which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load_config();
+    let cwd = std::env::current_dir()
+        .ok()
+        .map(|p| p.to_string_lossy().into_owned());
     let plan = test_plan(which, &config.notify_types);
     for (ty, in_allowlist) in plan {
         let note = if in_allowlist {
@@ -113,7 +116,7 @@ fn run_test(which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
             "  (not in your notify_types — forcing anyway)"
         };
         println!("→ firing {ty}{note}");
-        dispatch(&ty, "", &config, true);
+        dispatch(&ty, "", cwd.as_deref(), &config, true);
         std::thread::sleep(std::time::Duration::from_millis(800));
     }
     Ok(())
@@ -137,7 +140,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    dispatch(notification_type, message, &config, false);
+    dispatch(
+        notification_type,
+        message,
+        hook_input.cwd.as_deref(),
+        &config,
+        false,
+    );
 
     Ok(())
 }
@@ -152,7 +161,13 @@ fn should_act(notification_type: &str, notify_types: &[String]) -> bool {
 /// Perform the focus and/or notify actions for a notification.
 /// Shared by the real hook path (`force = false`, honors `mode`) and the
 /// `test` subcommand (`force = true`, fires BOTH legs regardless of `mode`).
-fn dispatch(notification_type: &str, message: &str, config: &config::Config, force: bool) {
+fn dispatch(
+    notification_type: &str,
+    message: &str,
+    cwd: Option<&str>,
+    config: &config::Config,
+    force: bool,
+) {
     let should_focus = force || config.mode == Mode::Both || config.mode == Mode::FocusOnly;
     let should_notify = force || config.mode == Mode::Both || config.mode == Mode::NotifyOnly;
 
@@ -162,7 +177,7 @@ fn dispatch(notification_type: &str, message: &str, config: &config::Config, for
         }
     }
     if should_notify {
-        notify::send_notification(notification_type, message, config);
+        notify::send_notification(notification_type, message, cwd, config, force);
     }
 }
 

@@ -53,15 +53,27 @@ do_hook() {
     echo "==> Merging hook into Claude Code settings..."
     mkdir -p "$(dirname "$SETTINGS_FILE")"
     SETTINGS_FILE="$SETTINGS_FILE" BIN_DIR="$BIN_DIR" python3 - <<'PY'
-import json, os
+import json, os, stat, tempfile
 settings_file = os.environ['SETTINGS_FILE']
 hook_command = os.path.join(os.environ['BIN_DIR'], 'claude-focus')
 
+settings = {}
 if os.path.exists(settings_file):
-    with open(settings_file) as f:
-        settings = json.load(f)
-else:
-    settings = {}
+    try:
+        with open(settings_file) as f:
+            settings = json.load(f)
+    except (ValueError, OSError) as e:
+        raise SystemExit(
+            "    ERROR: %s is not valid JSON (%s).\n"
+            "    Fix it or back it up, then re-run install. Left it untouched."
+            % (settings_file, e)
+        )
+    if not isinstance(settings, dict):
+        raise SystemExit(
+            "    ERROR: %s is valid JSON but not a JSON object.\n"
+            "    Fix it or back it up, then re-run install. Left it untouched."
+            % settings_file
+        )
 
 hook_entry = {'matcher': '*', 'hooks': [{'type': 'command', 'command': hook_command}]}
 hooks = settings.setdefault('hooks', {})
@@ -70,13 +82,27 @@ already_present = any(
     any(h.get('command') == hook_command for h in entry.get('hooks', []))
     for entry in notifications
 )
-if not already_present:
-    notifications.append(hook_entry)
-    with open(settings_file, 'w') as f:
-        json.dump(settings, f, indent=2)
-    print('    Hook added to', settings_file)
-else:
+if already_present:
     print('    Hook already present, skipping')
+else:
+    notifications.append(hook_entry)
+    # Atomic write: temp file in the same dir + os.replace, so a crash never
+    # truncates the user's Claude settings.
+    d = os.path.dirname(settings_file) or '.'
+    fd, tmp = tempfile.mkstemp(dir=d, prefix='.settings.', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(settings, f, indent=2)
+        # mkstemp creates 0600; preserve the original file's mode so the merge
+        # doesn't silently downgrade an existing settings.json's permissions.
+        if os.path.exists(settings_file):
+            os.chmod(tmp, stat.S_IMODE(os.stat(settings_file).st_mode))
+        os.replace(tmp, settings_file)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    print('    Hook added to', settings_file)
 PY
 }
 
@@ -90,17 +116,42 @@ do_enable() {
     fi
 }
 
+preflight() {
+    echo "==> Checking dependencies..."
+    local missing_hard=0 dep pkg
+    if ! command -v cargo &>/dev/null; then
+        echo "    [FAIL] cargo not found — install Rust: https://rustup.rs" >&2
+        missing_hard=1
+    fi
+    for dep in notify-send gdbus pw-play; do
+        if ! command -v "$dep" &>/dev/null; then
+            case "$dep" in
+                notify-send) pkg="libnotify-bin" ;;
+                gdbus)       pkg="libglib2.0-bin" ;;
+                pw-play)     pkg="pipewire-bin (or set play_sound=false)" ;;
+            esac
+            echo "    [warn] $dep not found — sudo apt install $pkg"
+        fi
+    done
+    if [ "${XDG_SESSION_TYPE:-}" != "wayland" ] || ! printf '%s' "${XDG_CURRENT_DESKTOP:-}" | grep -qi gnome; then
+        echo "    [warn] auto-focus needs GNOME/Wayland; desktop notifications still work elsewhere"
+    fi
+    if [ "$missing_hard" -eq 1 ]; then
+        echo "    Aborting: install the hard requirement(s) above and re-run." >&2
+        exit 1
+    fi
+}
+
 print_full_summary() {
-    echo ""
-    echo "Installation complete!"
     echo ""
     echo "  Binary:    $BIN_DIR/claude-focus"
     echo "  Config:    $CONFIG_DIR/config.toml"
     echo "  Extension: $EXT_DIR/"
     echo ""
-    echo "NOTE: For auto-focus to work, you must log out and log back in"
-    echo "      (or restart GNOME Shell) to load the extension."
-    echo "      Desktop notifications work immediately."
+    echo "==> Verifying install (claude-focus doctor):"
+    # doctor reports each leg as PASS/FAIL and always exits 0 in real use; the
+    # `|| true` also keeps a non-real binary from aborting the script.
+    "$BIN_DIR/claude-focus" doctor || true
 }
 
 usage() {
@@ -129,6 +180,7 @@ main() {
     done
 
     if [ "$do_all" -eq 1 ]; then
+        preflight
         do_build; do_bin; do_ext; do_config; do_hook; do_enable
         print_full_summary
     else

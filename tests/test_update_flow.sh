@@ -25,7 +25,18 @@ make_sandbox() {
   cp "$REPO/extension/extension.js"   "$PROJECT_DIR/extension/"
   cp "$REPO/config/claude-focus.toml" "$PROJECT_DIR/config/"
   mkdir -p "$SB/fakebin"
-  printf '#!/usr/bin/env bash\nmkdir -p target/release\necho dummy > target/release/claude-focus\n' > "$SB/fakebin/cargo"
+  # Fake cargo writes an executable stub binary that answers `doctor` (so the
+  # end-of-install doctor run is observable) and otherwise exits 0.
+  cat > "$SB/fakebin/cargo" <<'CARGO'
+#!/usr/bin/env bash
+mkdir -p target/release
+cat > target/release/claude-focus <<'BIN'
+#!/usr/bin/env bash
+[ "$1" = doctor ] && echo "claude-focus doctor (stub) — DOCTOR RAN"
+exit 0
+BIN
+chmod +x target/release/claude-focus
+CARGO
   printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/fakebin/gnome-extensions"
   chmod +x "$SB/fakebin/cargo" "$SB/fakebin/gnome-extensions"
 }
@@ -47,6 +58,7 @@ assert_present  "full install creates metadata.json" "$EXT_DIR/metadata.json"
 assert_present  "full install creates config"        "$CONFIG_DIR/config.toml"
 assert_present  "full install writes settings"       "$SETTINGS_FILE"
 assert_contains "settings reference the hook path"   "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
+assert_contains "full install runs doctor"           "$OUT" "DOCTOR RAN"
 rm -rf "$SB"
 
 echo "== install.sh: --bin (binary only) =="
@@ -100,6 +112,78 @@ assert_contains "unchanged --ext says nothing to reload" "$OUT" "nothing to relo
 echo "// changed" >> "$PROJECT_DIR/extension/extension.js"
 run_install --ext                                   # now the source differs
 assert_contains "changed --ext says relogin" "$OUT" "Log out/in to load"
+rm -rf "$SB"
+
+echo "== install.sh: malformed settings.json fails loudly, leaves file intact =="
+make_sandbox
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+printf '{ this is not valid json ' > "$SETTINGS_FILE"
+before="$(cat "$SETTINGS_FILE")"
+run_install
+assert_eq       "malformed settings aborts nonzero"  "$RC" "1"
+assert_contains "malformed settings explains why"    "$OUT" "not valid JSON"
+assert_eq       "malformed settings left intact"     "$(cat "$SETTINGS_FILE")" "$before"
+rm -rf "$SB"
+
+echo "== install.sh: merges into existing valid settings, preserving keys =="
+make_sandbox
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+printf '{"otherKey": 42}' > "$SETTINGS_FILE"
+run_install
+assert_eq       "merge exits 0"                "$RC" "0"
+assert_contains "merge preserves existing key" "$(cat "$SETTINGS_FILE")" "otherKey"
+assert_contains "merge adds hook"              "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
+# The merged file must be STRUCTURALLY valid JSON with the hook in place — a
+# substring check alone would pass a non-atomic/truncating write. (atomicity gate)
+PARSE_RC=0
+python3 -c '
+import json, sys
+s = json.load(open(sys.argv[1]))
+ok = s.get("otherKey") == 42 and any(
+    h.get("command", "").endswith("claude-focus")
+    for e in s["hooks"]["Notification"] for h in e.get("hooks", [])
+)
+sys.exit(0 if ok else 1)
+' "$SETTINGS_FILE" || PARSE_RC=$?
+assert_eq "merged settings is valid JSON with hook in place" "$PARSE_RC" "0"
+assert_eq "no stray temp file after merge" \
+  "$(find "$(dirname "$SETTINGS_FILE")" -name '.settings.*.tmp' | wc -l | tr -d ' ')" "0"
+rm -rf "$SB"
+
+echo "== install.sh: malformed settings leaves no stray temp file =="
+make_sandbox
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+printf '{ this is not valid json ' > "$SETTINGS_FILE"
+run_install
+assert_eq "no stray temp file after malformed abort" \
+  "$(find "$(dirname "$SETTINGS_FILE")" -name '.settings.*.tmp' | wc -l | tr -d ' ')" "0"
+rm -rf "$SB"
+
+echo "== install.sh: re-install over an existing hook is idempotent =="
+make_sandbox
+run_install                                  # first install: hook appended
+run_install                                  # second install: already present
+assert_eq       "reinstall exits 0"               "$RC" "0"
+assert_contains "reinstall says already present"  "$OUT" "already present"
+assert_eq       "hook present exactly once"       "$(grep -c "$BIN_DIR/claude-focus" "$SETTINGS_FILE")" "1"
+rm -rf "$SB"
+
+echo "== install.sh: preflight hard-fails when cargo is missing =="
+make_sandbox
+# Build a clean PATH with the real tools install.sh needs but deliberately NO
+# cargo — independent of where the real cargo lives. type -P bypasses any shell
+# function/alias so the symlinks resolve to actual binaries.
+CLEAN="$SB/cleanbin"; mkdir -p "$CLEAN"
+for t in bash env sh dirname cp mkdir chmod cmp python3 grep cat mktemp rm; do
+  p="$(type -P "$t" 2>/dev/null || true)"; [ -n "$p" ] && ln -sf "$p" "$CLEAN/$t"
+done
+cp "$SB/fakebin/gnome-extensions" "$CLEAN/gnome-extensions"   # present; NB: no cargo
+OUT="$(PATH="$CLEAN" PROJECT_DIR="$PROJECT_DIR" BIN_DIR="$BIN_DIR" \
+       EXT_DIR="$EXT_DIR" CONFIG_DIR="$CONFIG_DIR" SETTINGS_FILE="$SETTINGS_FILE" \
+       bash "$INSTALL" 2>&1)"; RC=$?
+assert_eq       "missing cargo exits 1"        "$RC" "1"
+assert_contains "missing cargo names rustup"   "$OUT" "rustup"
+assert_absent   "missing cargo builds nothing" "$BIN_DIR/claude-focus"
 rm -rf "$SB"
 
 echo "== Makefile: targets map to the right commands =="

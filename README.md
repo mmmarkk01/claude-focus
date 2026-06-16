@@ -6,7 +6,7 @@ Auto-focus your terminal and play a sound alert when Claude Code needs your atte
 
 When Claude Code needs input — a permission prompt, a question, or it's waiting idle — **claude-focus** will:
 
-1. **Send a desktop notification** with a contextual title (e.g. "Permission Required", "Ready for Input")
+1. **Send a desktop notification** with a contextual title that includes the project directory (e.g. "Claude Code — Permission Required · my-project"), so you can tell which session needs attention when several are running
 2. **Play a sound alert** so you hear it even if your screen is off or you're looking elsewhere
 3. **Bring the terminal to the foreground** (auto-focus, requires GNOME Shell extension — see below)
 
@@ -25,7 +25,7 @@ Claude Code emits notification
         → checks if notification_type matches configured types
         → attempts auto-focus via GNOME Shell extension (D-Bus)
         → sends desktop notification via notify-send
-        → plays sound via pw-play (PipeWire) or paplay (PulseAudio)
+        → plays sound via pw-play (PipeWire)
         → always exits 0 (never blocks Claude Code)
 ```
 
@@ -43,9 +43,9 @@ Claude Code emits notification
                           ┌──────────────┘   │   └──────────────┐
                           ▼                  ▼                  ▼
                     ┌───────────┐    ┌──────────────┐    ┌─────────────┐
-                    │  gdbus →  │    │ notify-send  │    │  pw-play /  │
-                    │  GNOME    │    │ (desktop     │    │  paplay     │
-                    │  Shell    │    │  notification│    │  (sound)    │
+                    │  gdbus →  │    │ notify-send  │    │  pw-play    │
+                    │  GNOME    │    │ (desktop     │    │  (sound)    │
+                    │  Shell    │    │  notification│    │             │
                     │  Extension│    │  )           │    │             │
                     └───────────┘    └──────────────┘    └─────────────┘
                     Auto-focus        Visual alert        Audio alert
@@ -68,7 +68,7 @@ If it encounters a **tmux server** in the process tree, it queries `tmux list-cl
 - **Linux** with GNOME desktop (tested on GNOME Shell 46, Ubuntu 24.04)
 - **Rust toolchain** (for building)
 - **notify-send** (usually pre-installed on GNOME)
-- **pw-play** (PipeWire) or **paplay** (PulseAudio) for sound alerts
+- **pw-play** (PipeWire) for sound alerts
 - **Claude Code** with hooks support
 
 ## Installation
@@ -209,6 +209,10 @@ notification_timeout_ms = 5000
 # Sound alert
 play_sound = true
 sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
+
+# Quiet hours: suppress banner + sound during this local-time window
+# (auto-focus still runs). Format "HH:MM-HH:MM", may wrap past midnight.
+# quiet_hours = "22:00-08:00"
 ```
 
 ### Options
@@ -220,6 +224,7 @@ sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
 | `notification_timeout_ms` | Integer (ms) | `5000` | How long the desktop notification stays visible |
 | `play_sound` | `true` / `false` | `false` | Whether to play an audio alert |
 | `sound_file` | File path | `bell.oga` | Path to the `.oga` sound file |
+| `quiet_hours` | `"HH:MM-HH:MM"` or unset | unset | Suppress banner + sound during this local-time window (auto-focus still runs, when `mode` includes focus); may wrap past midnight |
 
 ### Notification Types
 
@@ -229,6 +234,8 @@ sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
 | `idle_prompt` | Claude Code has finished and is waiting for your next message |
 | `elicitation_dialog` | Claude Code is asking you a question |
 | `auth_success` | Authentication completed |
+
+Permission prompts fire as **critical** (persistent) notifications so they cut through; the other types fire as **normal**.
 
 ### Available Sounds
 
@@ -271,12 +278,12 @@ This removes the binary, GNOME extension, and hook from Claude Code settings. Yo
 **No sound?**
 - Check that `play_sound = true` in your config
 - Test `pw-play` directly: `pw-play /usr/share/sounds/freedesktop/stereo/bell.oga`
-- If `pw-play` isn't found, install PipeWire tools or PulseAudio (`sudo apt install pulseaudio-utils`)
+- If `pw-play` isn't found, install PipeWire tools (`sudo apt install pipewire-bin`)
 - Some sound files are very quiet — try `bell.oga` or `alarm-clock-elapsed.oga`
 
 **No notification popup?**
 - Test `notify-send` directly: `notify-send "Test" "Hello"`
-- Check that Do Not Disturb is off in GNOME settings
+- claude-focus **respects** GNOME Do Not Disturb: while DND is on, banners and sound are suppressed (auto-focus still works, when `mode` includes focus). Turn DND off, or check `quiet_hours` in your config, if you expect a banner and see none.
 
 **Auto-focus not working?**
 - Log out and back in after installing (required to load the GNOME Shell extension)
@@ -299,7 +306,7 @@ claude-focus/
 │   ├── config.rs               # TOML config loading and defaults
 │   ├── process_tree.rs         # /proc walker to find terminal PID (tmux-aware)
 │   ├── dbus.rs                 # gdbus call to GNOME Shell extension
-│   └── notify.rs               # notify-send + pw-play/paplay
+│   └── notify.rs               # notify-send + pw-play
 ├── extension/
 │   ├── metadata.json           # GNOME Shell extension metadata
 │   └── extension.js            # D-Bus service for window activation by PID
