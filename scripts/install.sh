@@ -134,15 +134,14 @@ preflight() {
 
 print_full_summary() {
     echo ""
-    echo "Installation complete!"
-    echo ""
     echo "  Binary:    $BIN_DIR/claude-focus"
     echo "  Config:    $CONFIG_DIR/config.toml"
     echo "  Extension: $EXT_DIR/"
     echo ""
-    echo "NOTE: For auto-focus to work, you must log out and log back in"
-    echo "      (or restart GNOME Shell) to load the extension."
-    echo "      Desktop notifications work immediately."
+    echo "==> Verifying install (claude-focus doctor):"
+    # doctor reports each leg as PASS/FAIL and always exits 0 in real use; the
+    # `|| true` also keeps a non-real binary from aborting the script.
+    "$BIN_DIR/claude-focus" doctor || true
 }
 
 usage() {

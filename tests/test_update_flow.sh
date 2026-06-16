@@ -25,7 +25,18 @@ make_sandbox() {
   cp "$REPO/extension/extension.js"   "$PROJECT_DIR/extension/"
   cp "$REPO/config/claude-focus.toml" "$PROJECT_DIR/config/"
   mkdir -p "$SB/fakebin"
-  printf '#!/usr/bin/env bash\nmkdir -p target/release\necho dummy > target/release/claude-focus\n' > "$SB/fakebin/cargo"
+  # Fake cargo writes an executable stub binary that answers `doctor` (so the
+  # end-of-install doctor run is observable) and otherwise exits 0.
+  cat > "$SB/fakebin/cargo" <<'CARGO'
+#!/usr/bin/env bash
+mkdir -p target/release
+cat > target/release/claude-focus <<'BIN'
+#!/usr/bin/env bash
+[ "$1" = doctor ] && echo "claude-focus doctor (stub) — DOCTOR RAN"
+exit 0
+BIN
+chmod +x target/release/claude-focus
+CARGO
   printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/fakebin/gnome-extensions"
   chmod +x "$SB/fakebin/cargo" "$SB/fakebin/gnome-extensions"
 }
@@ -47,6 +58,7 @@ assert_present  "full install creates metadata.json" "$EXT_DIR/metadata.json"
 assert_present  "full install creates config"        "$CONFIG_DIR/config.toml"
 assert_present  "full install writes settings"       "$SETTINGS_FILE"
 assert_contains "settings reference the hook path"   "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
+assert_contains "full install runs doctor"           "$OUT" "DOCTOR RAN"
 rm -rf "$SB"
 
 echo "== install.sh: --bin (binary only) =="
