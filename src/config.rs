@@ -61,10 +61,26 @@ impl Default for Config {
     }
 }
 
+/// Parse config from a TOML string. On a parse error, print the error (which
+/// carries line/column) to stderr and fall back to defaults — never panic,
+/// never silently discard config without a signal.
+pub fn parse_config_or_default(contents: &str) -> Config {
+    match toml::from_str(contents) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!(
+                "claude-focus: invalid config at {}, using defaults: {e}",
+                config_path().display()
+            );
+            Config::default()
+        }
+    }
+}
+
 pub fn load_config() -> Config {
     let path = config_path();
     match std::fs::read_to_string(&path) {
-        Ok(contents) => toml::from_str(&contents).unwrap_or_default(),
+        Ok(contents) => parse_config_or_default(&contents),
         Err(_) => Config::default(),
     }
 }
@@ -75,4 +91,22 @@ fn config_path() -> PathBuf {
         .join(".config")
         .join("claude-focus")
         .join("config.toml")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_config_parses() {
+        let cfg = parse_config_or_default("mode = \"notify-only\"\n");
+        assert_eq!(cfg.mode, Mode::NotifyOnly);
+    }
+
+    #[test]
+    fn invalid_config_falls_back_to_defaults() {
+        // A broken table header must yield defaults, never a panic.
+        let cfg = parse_config_or_default("mode = \"notify-only\"\n[ broken");
+        assert_eq!(cfg.mode, Mode::default()); // Mode::Both
+    }
 }
