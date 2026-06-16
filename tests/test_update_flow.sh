@@ -133,6 +133,39 @@ run_install
 assert_eq       "merge exits 0"                "$RC" "0"
 assert_contains "merge preserves existing key" "$(cat "$SETTINGS_FILE")" "otherKey"
 assert_contains "merge adds hook"              "$(cat "$SETTINGS_FILE")" "$BIN_DIR/claude-focus"
+# The merged file must be STRUCTURALLY valid JSON with the hook in place — a
+# substring check alone would pass a non-atomic/truncating write. (atomicity gate)
+PARSE_RC=0
+python3 -c '
+import json, sys
+s = json.load(open(sys.argv[1]))
+ok = s.get("otherKey") == 42 and any(
+    h.get("command", "").endswith("claude-focus")
+    for e in s["hooks"]["Notification"] for h in e.get("hooks", [])
+)
+sys.exit(0 if ok else 1)
+' "$SETTINGS_FILE" || PARSE_RC=$?
+assert_eq "merged settings is valid JSON with hook in place" "$PARSE_RC" "0"
+assert_eq "no stray temp file after merge" \
+  "$(find "$(dirname "$SETTINGS_FILE")" -name '.settings.*.tmp' | wc -l | tr -d ' ')" "0"
+rm -rf "$SB"
+
+echo "== install.sh: malformed settings leaves no stray temp file =="
+make_sandbox
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+printf '{ this is not valid json ' > "$SETTINGS_FILE"
+run_install
+assert_eq "no stray temp file after malformed abort" \
+  "$(find "$(dirname "$SETTINGS_FILE")" -name '.settings.*.tmp' | wc -l | tr -d ' ')" "0"
+rm -rf "$SB"
+
+echo "== install.sh: re-install over an existing hook is idempotent =="
+make_sandbox
+run_install                                  # first install: hook appended
+run_install                                  # second install: already present
+assert_eq       "reinstall exits 0"               "$RC" "0"
+assert_contains "reinstall says already present"  "$OUT" "already present"
+assert_eq       "hook present exactly once"       "$(grep -c "$BIN_DIR/claude-focus" "$SETTINGS_FILE")" "1"
 rm -rf "$SB"
 
 echo "== install.sh: preflight hard-fails when cargo is missing =="
