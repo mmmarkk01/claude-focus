@@ -25,7 +25,7 @@ Claude Code emits notification
         → checks if notification_type matches configured types
         → attempts auto-focus via GNOME Shell extension (D-Bus)
         → sends desktop notification via notify-send
-        → plays sound via pw-play (PipeWire) or paplay (PulseAudio)
+        → plays sound via pw-play (PipeWire)
         → always exits 0 (never blocks Claude Code)
 ```
 
@@ -43,9 +43,9 @@ Claude Code emits notification
                           ┌──────────────┘   │   └──────────────┐
                           ▼                  ▼                  ▼
                     ┌───────────┐    ┌──────────────┐    ┌─────────────┐
-                    │  gdbus →  │    │ notify-send  │    │  pw-play /  │
-                    │  GNOME    │    │ (desktop     │    │  paplay     │
-                    │  Shell    │    │  notification│    │  (sound)    │
+                    │  gdbus →  │    │ notify-send  │    │  pw-play    │
+                    │  GNOME    │    │ (desktop     │    │  (sound)    │
+                    │  Shell    │    │  notification│    │             │
                     │  Extension│    │  )           │    │             │
                     └───────────┘    └──────────────┘    └─────────────┘
                     Auto-focus        Visual alert        Audio alert
@@ -68,7 +68,7 @@ If it encounters a **tmux server** in the process tree, it queries `tmux list-cl
 - **Linux** with GNOME desktop (tested on GNOME Shell 46, Ubuntu 24.04)
 - **Rust toolchain** (for building)
 - **notify-send** (usually pre-installed on GNOME)
-- **pw-play** (PipeWire) or **paplay** (PulseAudio) for sound alerts
+- **pw-play** (PipeWire) for sound alerts
 - **Claude Code** with hooks support
 
 ## Installation
@@ -271,7 +271,7 @@ This removes the binary, GNOME extension, and hook from Claude Code settings. Yo
 **No sound?**
 - Check that `play_sound = true` in your config
 - Test `pw-play` directly: `pw-play /usr/share/sounds/freedesktop/stereo/bell.oga`
-- If `pw-play` isn't found, install PipeWire tools or PulseAudio (`sudo apt install pulseaudio-utils`)
+- If `pw-play` isn't found, install PipeWire tools (`sudo apt install pipewire-bin`)
 - Some sound files are very quiet — try `bell.oga` or `alarm-clock-elapsed.oga`
 
 **No notification popup?**
@@ -299,7 +299,7 @@ claude-focus/
 │   ├── config.rs               # TOML config loading and defaults
 │   ├── process_tree.rs         # /proc walker to find terminal PID (tmux-aware)
 │   ├── dbus.rs                 # gdbus call to GNOME Shell extension
-│   └── notify.rs               # notify-send + pw-play/paplay
+│   └── notify.rs               # notify-send + pw-play
 ├── extension/
 │   ├── metadata.json           # GNOME Shell extension metadata
 │   └── extension.js            # D-Bus service for window activation by PID

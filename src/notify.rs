@@ -66,14 +66,6 @@ pub fn send_notification(
         "--app-name", "Claude Code",
     ];
 
-    let sound_hint;
-    if config.play_sound {
-        if let Some(ref sound_file) = config.sound_file {
-            sound_hint = format!("string:sound-file:{sound_file}");
-            args.extend_from_slice(&["--hint", &sound_hint]);
-        }
-    }
-
     args.push(&title);
     args.push(body);
 
