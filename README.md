@@ -106,6 +106,28 @@ gdbus introspect --session \
     --object-path /org/gnome/Shell/Extensions/FocusByPid
 ```
 
+## Updating & Development
+
+Already installed and just want your local changes live? The two artifacts update very differently:
+
+- **The binary** (`src/*.rs`) hot-swaps instantly — the Notification hook spawns a fresh process on every event, so a rebuilt binary is used on the very next notification. No restart.
+- **The GNOME extension** (`extension.js`) needs GNOME Shell to reload it. On **Wayland** that means **log out and back in** (`Alt+F2 → r` is X11-only). The tooling only nags you to log back in when the extension actually changed.
+
+A `Makefile` wraps `scripts/install.sh` with granular targets:
+
+| Command | What it does | When |
+|---|---|---|
+| `make update` | rebuild + reinstall binary **and** extension | everyday "deploy what I changed" |
+| `make bin` | rebuild + reinstall the binary only | the common Rust change — live instantly |
+| `make ext` | reinstall the extension only | changed `extension.js` (prints log-out/in notice if needed) |
+| `make install` | full install (binary + extension + config + hook + enable) | first-time setup |
+| `make watch` | auto-rebuild + reinstall the binary on every source save | tight inner loop (needs `cargo install cargo-watch`) |
+| `make uninstall` | remove everything (config preserved) | |
+| `make check` | run the dependency-free test suite | before committing |
+| `make help` | list all targets | |
+
+`scripts/install.sh` still works directly with no arguments (full install) for anyone not using `make`; it also accepts `--bin` and `--ext`.
+
 ## Using It Globally with Claude Code
 
 The install script configures claude-focus as a **global** hook — it applies to all Claude Code sessions, in every project directory. The hook is registered in your user-level settings file:
