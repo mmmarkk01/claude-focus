@@ -1,18 +1,13 @@
 use serde::Deserialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum Mode {
+    #[default]
     Both,
     FocusOnly,
     NotifyOnly,
-}
-
-impl Default for Mode {
-    fn default() -> Self {
-        Mode::Both
-    }
 }
 
 #[derive(Debug, Deserialize)]
