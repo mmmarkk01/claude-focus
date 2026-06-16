@@ -11,3 +11,7 @@ notification_timeout_ms = 5000
 # Sound alert
 play_sound = false
 sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
+
+# Quiet hours: suppress banner + sound during this local-time window
+# (auto-focus still runs). Format "HH:MM-HH:MM", may wrap past midnight.
+# quiet_hours = "22:00-08:00"
