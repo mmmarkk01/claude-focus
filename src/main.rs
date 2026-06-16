@@ -78,8 +78,43 @@ fn print_help() {
     );
 }
 
-fn run_test(_which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    eprintln!("claude-focus: `test` not yet implemented");
+const ALL_TYPES: [&str; 4] = [
+    "permission_prompt",
+    "idle_prompt",
+    "elicitation_dialog",
+    "auth_success",
+];
+
+/// Build the (type, in_allowlist) list `test` will fire. Pure, for testing.
+fn test_plan(which: Option<&str>, notify_types: &[String]) -> Vec<(String, bool)> {
+    let types: Vec<&str> = match which {
+        Some(t) => vec![t],
+        None => ALL_TYPES.to_vec(),
+    };
+    types
+        .into_iter()
+        .map(|t| (t.to_string(), notify_types.iter().any(|x| x == t)))
+        .collect()
+}
+
+/// Diagnostic: fire synthetic notification(s) through the REAL focus+notify
+/// code, intentionally BYPASSING both the notify_types allowlist AND the config
+/// `mode` gate (`force = true`) — `test` always exercises focus AND notify so
+/// you can confirm each leg. Highlights the invoking terminal (the /proc walk
+/// starts from this process).
+fn run_test(which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let config = config::load_config();
+    let plan = test_plan(which, &config.notify_types);
+    for (ty, in_allowlist) in plan {
+        let note = if in_allowlist {
+            ""
+        } else {
+            "  (not in your notify_types — forcing anyway)"
+        };
+        println!("→ firing {ty}{note}");
+        dispatch(&ty, "", &config, true);
+        std::thread::sleep(std::time::Duration::from_millis(800));
+    }
     Ok(())
 }
 
@@ -187,5 +222,23 @@ mod tests {
     #[test]
     fn test_without_type_parses() {
         assert!(matches!(parse_args(&["test".to_string()]), Command::Test(None)));
+    }
+
+    #[test]
+    fn test_plan_no_arg_covers_all_four_with_allowlist_flags() {
+        let notify = vec!["permission_prompt".to_string(), "idle_prompt".to_string()];
+        let plan = test_plan(None, &notify);
+        assert_eq!(plan.len(), 4);
+        // auth_success is absent from the allowlist -> flagged false (forced anyway).
+        let auth = plan.iter().find(|(t, _)| t == "auth_success").unwrap();
+        assert!(!auth.1);
+        let perm = plan.iter().find(|(t, _)| t == "permission_prompt").unwrap();
+        assert!(perm.1);
+    }
+
+    #[test]
+    fn test_plan_single_type() {
+        let plan = test_plan(Some("idle_prompt"), &[]);
+        assert_eq!(plan, vec![("idle_prompt".to_string(), false)]);
     }
 }
