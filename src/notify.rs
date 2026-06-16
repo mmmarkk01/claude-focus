@@ -30,12 +30,84 @@ fn title_with_project(base: &str, cwd: Option<&str>) -> String {
     }
 }
 
+/// Parse "HH:MM" into minutes-since-midnight (0..=1439). None if malformed.
+fn parse_hm(s: &str) -> Option<u32> {
+    let (h, m) = s.trim().split_once(':')?;
+    let h: u32 = h.parse().ok()?;
+    let m: u32 = m.parse().ok()?;
+    if h < 24 && m < 60 {
+        Some(h * 60 + m)
+    } else {
+        None
+    }
+}
+
+/// True if `now_min` (minutes since midnight) is inside the quiet window
+/// `"HH:MM-HH:MM"`. Supports windows that wrap past midnight (e.g.
+/// "22:00-08:00"). End is exclusive. A malformed/None window is "no quiet
+/// hours" (false) — never silently swallow a bad value into "always quiet".
+fn in_quiet_hours(window: Option<&str>, now_min: u32) -> bool {
+    let Some(window) = window else {
+        return false;
+    };
+    let Some((start, end)) = window.split_once('-') else {
+        return false;
+    };
+    let (Some(start), Some(end)) = (parse_hm(start), parse_hm(end)) else {
+        return false;
+    };
+    if start <= end {
+        now_min >= start && now_min < end
+    } else {
+        now_min >= start || now_min < end
+    }
+}
+
+/// GNOME "show banners" == false ⇒ Do Not Disturb on. Best-effort: any failure
+/// (no gsettings, non-GNOME, parse miss) ⇒ false, i.e. notify normally. Never
+/// false-suppress.
+fn gnome_dnd_active() -> bool {
+    Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.notifications", "show-banners"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "false")
+        .unwrap_or(false)
+}
+
+/// Local wall-clock minutes-since-midnight via `date` (a standard tool — avoids
+/// pulling in a timezone crate, consistent with the zero-runtime-deps ethos).
+fn now_minutes() -> Option<u32> {
+    let out = Command::new("date").arg("+%H:%M").output().ok()?;
+    parse_hm(String::from_utf8_lossy(&out.stdout).trim())
+}
+
+/// Whether the *noisy* legs (banner + sound) should be suppressed right now:
+/// GNOME DND on, OR inside the configured quiet-hours window. Focus is NOT
+/// gated by this.
+fn notifications_silenced(config: &Config) -> bool {
+    if gnome_dnd_active() {
+        return true;
+    }
+    match (config.quiet_hours.as_deref(), now_minutes()) {
+        (Some(window), Some(now)) => in_quiet_hours(Some(window), now),
+        _ => false,
+    }
+}
+
 pub fn send_notification(
     notification_type: &str,
     message: &str,
     cwd: Option<&str>,
     config: &Config,
+    force: bool,
 ) {
+    // Respect DND / quiet hours for the noisy legs. `test` (force) bypasses so
+    // diagnostics always show a banner. Auto-focus is unaffected (it lives in
+    // main::dispatch).
+    if !force && notifications_silenced(config) {
+        return;
+    }
+
     let base_title = match notification_type {
         "permission_prompt" => "Claude Code — Permission Required",
         "idle_prompt" => "Claude Code — Ready for Input",
@@ -120,5 +192,48 @@ mod tests {
         assert_eq!(title_with_project("Claude Code", None), "Claude Code");
         assert_eq!(title_with_project("Claude Code", Some("")), "Claude Code");
         assert_eq!(title_with_project("Claude Code", Some("/")), "Claude Code");
+    }
+
+    #[test]
+    fn parse_hm_basic() {
+        assert_eq!(parse_hm("00:00"), Some(0));
+        assert_eq!(parse_hm("09:30"), Some(570));
+        assert_eq!(parse_hm("23:59"), Some(1439));
+        assert_eq!(parse_hm("24:00"), None);
+        assert_eq!(parse_hm("12:60"), None);
+        assert_eq!(parse_hm("bad"), None);
+        assert_eq!(parse_hm("12"), None);
+    }
+
+    #[test]
+    fn quiet_hours_none_is_never_quiet() {
+        assert!(!in_quiet_hours(None, 0));
+        assert!(!in_quiet_hours(None, 720));
+    }
+
+    #[test]
+    fn quiet_hours_simple_window() {
+        // 09:00-17:00 -> minutes 540..1020 (end exclusive)
+        assert!(!in_quiet_hours(Some("09:00-17:00"), 539));
+        assert!(in_quiet_hours(Some("09:00-17:00"), 540));
+        assert!(in_quiet_hours(Some("09:00-17:00"), 1019));
+        assert!(!in_quiet_hours(Some("09:00-17:00"), 1020));
+    }
+
+    #[test]
+    fn quiet_hours_wraps_midnight() {
+        // 22:00-08:00 -> >=1320 OR <480
+        assert!(in_quiet_hours(Some("22:00-08:00"), 1320)); // 22:00
+        assert!(in_quiet_hours(Some("22:00-08:00"), 0)); // 00:00
+        assert!(in_quiet_hours(Some("22:00-08:00"), 479)); // 07:59
+        assert!(!in_quiet_hours(Some("22:00-08:00"), 480)); // 08:00
+        assert!(!in_quiet_hours(Some("22:00-08:00"), 720)); // noon
+    }
+
+    #[test]
+    fn malformed_quiet_hours_is_not_quiet() {
+        assert!(!in_quiet_hours(Some("nonsense"), 720));
+        assert!(!in_quiet_hours(Some("25:00-26:00"), 720));
+        assert!(!in_quiet_hours(Some("22:00"), 720)); // no dash
     }
 }

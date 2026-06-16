@@ -209,6 +209,10 @@ notification_timeout_ms = 5000
 # Sound alert
 play_sound = true
 sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
+
+# Quiet hours: suppress banner + sound during this local-time window
+# (auto-focus still runs). Format "HH:MM-HH:MM", may wrap past midnight.
+# quiet_hours = "22:00-08:00"
 ```
 
 ### Options
@@ -220,6 +224,7 @@ sound_file = "/usr/share/sounds/freedesktop/stereo/bell.oga"
 | `notification_timeout_ms` | Integer (ms) | `5000` | How long the desktop notification stays visible |
 | `play_sound` | `true` / `false` | `false` | Whether to play an audio alert |
 | `sound_file` | File path | `bell.oga` | Path to the `.oga` sound file |
+| `quiet_hours` | `"HH:MM-HH:MM"` or unset | unset | Suppress banner + sound during this local-time window (auto-focus still runs); may wrap past midnight |
 
 ### Notification Types
 
@@ -276,7 +281,7 @@ This removes the binary, GNOME extension, and hook from Claude Code settings. Yo
 
 **No notification popup?**
 - Test `notify-send` directly: `notify-send "Test" "Hello"`
-- Check that Do Not Disturb is off in GNOME settings
+- claude-focus **respects** GNOME Do Not Disturb: while DND is on, banners and sound are suppressed (auto-focus still works). Turn DND off, or check `quiet_hours` in your config, if you expect a banner and see none.
 
 **Auto-focus not working?**
 - Log out and back in after installing (required to load the GNOME Shell extension)

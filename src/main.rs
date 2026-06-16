@@ -171,7 +171,7 @@ fn dispatch(
         }
     }
     if should_notify {
-        notify::send_notification(notification_type, message, cwd, config);
+        notify::send_notification(notification_type, message, cwd, config, force);
     }
 }
 
