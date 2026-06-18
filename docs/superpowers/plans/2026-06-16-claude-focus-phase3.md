@@ -19,19 +19,23 @@ A regression net (CI + tests) exists *before* the Phase 4 `Focuser` refactor, an
 ## Changes
 
 ### Pre-req — format the codebase
+
 Ran `cargo fmt` to normalize `doctor.rs/main.rs/notify.rs/process_tree.rs`. Mechanical, no behavior change — required so the `fmt --check` gate can ever pass.
 
 ### 3.1 — CI (`.github/workflows/ci.yml`)
+
 - **build-test** job (ubuntu-latest): `cargo fmt --check` → `clippy --all-targets -D warnings` → `build --release` → `cargo test` → release-binary smoke (pipes a `permission_prompt` payload with `PATH=` so helper spawns are no-ops, asserts exit 0) → `shellcheck scripts/*.sh`.
 - **version-bump** job (PR-only): `scripts/check-extension-version.sh FETCH_HEAD`.
 - Triggers: push to `main`/`staging`, all pull requests.
 
 ### 3.2 — Tests for the regression-prone logic
+
 - Extracted pure fns `is_known_terminal(&str)` (exact + 15-char `TASK_COMM_LEN` truncation match) and `is_tmux(&str)` from `walk_tree`; behavior identical, now unit-testable.
 - Table-driven tests: truncation match (`gnome-terminal-` → server), exact terminals, non-terminals, tmux server/client/bare/`tmuxinator`.
 - `tests/smoke.rs`: runs the real binary — valid `permission_prompt`, malformed JSON, and empty stdin all exit 0. Locks the "always exit 0 / never block Claude Code" ethos. Hermetic via empty `PATH` + throwaway `HOME`.
 
 ### 3.3 — Single source of version truth
+
 - README **Versioning** section: documents the two *incompatible* schemes (Cargo semver vs GNOME-mandated `metadata.json` integer) and the bump rule.
 - `tests/version_truth.rs`: asserts `metadata.json` `version` is a positive integer and `CARGO_PKG_VERSION` is semver.
 - `scripts/check-extension-version.sh`: PR guard — if `extension/extension.js` changed vs base, require the `metadata.json` integer to have incremented. Fail-safe (skips when base/blob unavailable).
