@@ -128,6 +128,19 @@ A `Makefile` wraps `scripts/install.sh` with granular targets:
 
 `scripts/install.sh` still works directly with no arguments (full install) for anyone not using `make`; it also accepts `--bin` and `--ext`.
 
+## Versioning
+
+claude-focus carries **two independent version numbers on purpose** — they use incompatible schemes and are *not* meant to match:
+
+| Artifact | Field | Scheme | Tracks |
+|---|---|---|---|
+| CLI binary | `Cargo.toml` `version` | semver `MAJOR.MINOR.PATCH` (e.g. `0.1.0`) | the released tool — printed by `claude-focus --version` |
+| GNOME extension | `extension/metadata.json` `version` | bare integer (e.g. `1`), **mandated by GNOME**, which rejects non-integer extension versions | the extension revision GNOME Shell has loaded |
+
+**Bump rule:** whenever you change something GNOME Shell loads — `extension/extension.js` or `extension/metadata.json` itself — increment the `metadata.json` integer `version` by one. The crate's semver in `Cargo.toml` follows the CLI's own release cadence and is unrelated to the extension integer.
+
+CI enforces both halves: `tests/version_truth.rs` checks each scheme stays well-formed, and a pull-request check fails if `extension.js` changed without the `metadata.json` integer being bumped.
+
 ## Using It Globally with Claude Code
 
 The install script configures claude-focus as a **global** hook — it applies to all Claude Code sessions, in every project directory. The hook is registered in your user-level settings file:
@@ -302,17 +315,24 @@ This removes the binary, GNOME extension, and hook from Claude Code settings. Yo
 claude-focus/
 ├── Cargo.toml                  # Rust dependencies (serde, serde_json, toml)
 ├── src/
-│   ├── main.rs                 # Entry point — reads stdin JSON, dispatches
+│   ├── main.rs                 # Entry point — argv dispatch, reads stdin JSON
 │   ├── config.rs               # TOML config loading and defaults
+│   ├── doctor.rs               # `doctor` self-diagnosis (deps, config, hook)
 │   ├── process_tree.rs         # /proc walker to find terminal PID (tmux-aware)
 │   ├── dbus.rs                 # gdbus call to GNOME Shell extension
 │   └── notify.rs               # notify-send + pw-play
+├── tests/
+│   ├── smoke.rs                # end-to-end "always exit 0" hook contract
+│   └── version_truth.rs        # version-scheme invariants
 ├── extension/
 │   ├── metadata.json           # GNOME Shell extension metadata
 │   └── extension.js            # D-Bus service for window activation by PID
 ├── config/
 │   └── claude-focus.toml       # Default config template
-└── scripts/
-    ├── install.sh              # Build + install everything
-    └── uninstall.sh            # Remove everything
+├── scripts/
+│   ├── install.sh              # Build + install everything
+│   ├── uninstall.sh            # Remove everything
+│   └── check-extension-version.sh  # CI: enforce the metadata.json bump rule
+└── .github/workflows/
+    └── ci.yml                  # fmt · clippy · build · tests · smoke · shellcheck
 ```
