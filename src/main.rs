@@ -117,7 +117,7 @@ fn run_test(which: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
             "  (not in your notify_types — forcing anyway)"
         };
         println!("→ firing {ty}{note}");
-        dispatch(&ty, "", cwd.as_deref(), &config, true);
+        dispatch(&ty, "", cwd.as_deref(), None, &config, true);
         std::thread::sleep(std::time::Duration::from_millis(800));
     }
     Ok(())
@@ -145,6 +145,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         notification_type,
         message,
         hook_input.cwd.as_deref(),
+        hook_input.session_id.as_deref(),
         &config,
         false,
     );
@@ -166,18 +167,33 @@ fn dispatch(
     notification_type: &str,
     message: &str,
     cwd: Option<&str>,
+    session_id: Option<&str>,
     config: &config::Config,
     force: bool,
 ) {
     let should_focus = force || config.mode == Mode::Both || config.mode == Mode::FocusOnly;
     let should_notify = force || config.mode == Mode::Both || config.mode == Mode::NotifyOnly;
 
-    if should_focus {
-        if let Some(pid) = process_tree::find_terminal_pid() {
-            dbus::highlight_window(pid, config.notification_timeout_ms);
+    let outcome = if should_focus {
+        let target = focus::FocusTarget {
+            pid: process_tree::find_terminal_pid(),
+            session_marker: session_id.and_then(focus::session_marker),
+            duration_ms: config.notification_timeout_ms,
+        };
+        let focuser = focus::detect_focuser();
+        if should_notify {
+            // Need the result to gate notify (4.3b): synchronous, bounded call.
+            focuser.focus(&target)
+        } else {
+            // Focus-only: nothing to gate — keep the fast fire-and-forget path.
+            focuser.focus_detached(&target);
+            focus::FocusOutcome::Unavailable
         }
-    }
-    if should_notify {
+    } else {
+        focus::FocusOutcome::Unavailable
+    };
+
+    if should_notify && !focus::focus_suppresses_notify(&outcome, force) {
         notify::send_notification(notification_type, message, cwd, config, force);
     }
 }
