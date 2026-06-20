@@ -46,9 +46,10 @@ fn walk_tree(start_pid: u32, visited: &mut HashSet<u32>) -> Option<u32> {
         // /proc Name field is truncated to 15 chars (TASK_COMM_LEN), so
         // "gnome-terminal-server" becomes "gnome-terminal-". Handle this
         // by also checking if a known terminal starts with the truncated name.
-        if KNOWN_TERMINALS.iter().any(|t| {
-            name == *t || (name.len() == 15 && t.starts_with(&name))
-        }) {
+        if KNOWN_TERMINALS
+            .iter()
+            .any(|t| name == *t || (name.len() == 15 && t.starts_with(&name)))
+        {
             return Some(pid);
         }
 
