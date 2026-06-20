@@ -13,7 +13,7 @@ fn urgency_for(notification_type: &str) -> &'static str {
 }
 
 /// Final path component of `cwd` (the project dir), or None when empty / root.
-fn project_basename(cwd: &str) -> Option<String> {
+pub(crate) fn project_basename(cwd: &str) -> Option<String> {
     std::path::Path::new(cwd)
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
@@ -142,9 +142,12 @@ pub fn send_notification(
 
     let urgency = urgency_for(notification_type);
     let mut args = vec![
-        "--urgency", urgency,
-        "--expire-time", &timeout_ms,
-        "--app-name", "Claude Code",
+        "--urgency",
+        urgency,
+        "--expire-time",
+        &timeout_ms,
+        "--app-name",
+        "Claude Code",
     ];
 
     args.push(&title);

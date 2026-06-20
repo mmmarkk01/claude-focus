@@ -127,11 +127,27 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     doctor::run()
 }
 
+/// SessionStart hook: tag the terminal title so the extension can later match
+/// this exact window. Prints the JSON Claude Code consumes, then exits 0.
+fn run_session_start(input: &HookInput) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(json) =
+        session_start_terminal_sequence(input.session_id.as_deref(), input.cwd.as_deref())
+    {
+        println!("{json}");
+    }
+    Ok(())
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut input = String::new();
     std::io::stdin().read_to_string(&mut input)?;
 
     let hook_input: HookInput = serde_json::from_str(&input)?;
+
+    if hook_input.hook_event_name.as_deref() == Some("SessionStart") {
+        return run_session_start(&hook_input);
+    }
+
     let config = config::load_config();
 
     let notification_type = hook_input.notification_type.as_deref().unwrap_or("");
@@ -158,6 +174,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 /// listed to act (fixes the old empty-type bypass).
 fn should_act(notification_type: &str, notify_types: &[String]) -> bool {
     notify_types.iter().any(|t| t == notification_type)
+}
+
+/// The window title set for a Claude session: `claude · <project> [cf:<id8>]`,
+/// or `claude [cf:<id8>]` when there is no project dir. The bracketed marker is
+/// what the extension matches.
+fn session_start_title(cwd: Option<&str>, marker: &str) -> String {
+    match cwd.and_then(notify::project_basename) {
+        Some(project) => format!("claude \u{00b7} {project} {marker}"),
+        None => format!("claude {marker}"),
+    }
+}
+
+/// Build the SessionStart hook's JSON stdout: a top-level `terminalSequence`
+/// carrying an OSC 2 (window title) escape, BEL-terminated. `None` when there is
+/// no session id to tag (then no title is set and matching uses the PID fallback).
+fn session_start_terminal_sequence(session_id: Option<&str>, cwd: Option<&str>) -> Option<String> {
+    let marker = session_id.and_then(focus::session_marker)?;
+    let title = session_start_title(cwd, &marker);
+    let osc = format!("\u{1b}]2;{title}\u{7}");
+    Some(serde_json::json!({ "terminalSequence": osc }).to_string())
 }
 
 /// Perform the focus and/or notify actions for a notification.
@@ -281,5 +317,46 @@ mod tests {
     fn test_plan_single_type() {
         let plan = test_plan(Some("idle_prompt"), &[]);
         assert_eq!(plan, vec![("idle_prompt".to_string(), false)]);
+    }
+
+    #[test]
+    fn session_start_title_includes_project_and_marker() {
+        assert_eq!(
+            session_start_title(Some("/home/u/git_repos/claude-focus"), "[cf:50613d2b]"),
+            "claude · claude-focus [cf:50613d2b]"
+        );
+    }
+
+    #[test]
+    fn session_start_title_without_project() {
+        assert_eq!(session_start_title(None, "[cf:abc]"), "claude [cf:abc]");
+        assert_eq!(
+            session_start_title(Some("/"), "[cf:abc]"),
+            "claude [cf:abc]"
+        );
+    }
+
+    #[test]
+    fn session_start_sequence_is_osc2_json_with_marker() {
+        let json = session_start_terminal_sequence(
+            Some("50613d2b-7490-497a-965c-6992e1bc7d45"),
+            Some("/home/u/git_repos/claude-focus"),
+        )
+        .expect("a session id yields a sequence");
+        // Parse it back and check the exact OSC 2 string.
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            v["terminalSequence"].as_str().unwrap(),
+            "\u{1b}]2;claude · claude-focus [cf:50613d2b]\u{7}"
+        );
+    }
+
+    #[test]
+    fn session_start_sequence_none_without_session_id() {
+        assert_eq!(session_start_terminal_sequence(None, Some("/tmp")), None);
+        assert_eq!(
+            session_start_terminal_sequence(Some(""), Some("/tmp")),
+            None
+        );
     }
 }
