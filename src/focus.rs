@@ -6,6 +6,7 @@
 /// What `Focuser::focus` is asked to act on. `pid` is best-effort (gnome-terminal
 /// shares one server PID across windows, so it is only a fallback); `session_marker`
 /// is the precise per-window key embedded in the title by the SessionStart hook.
+#[derive(Debug)]
 pub struct FocusTarget {
     pub pid: Option<u32>,
     pub session_marker: Option<String>,
@@ -15,10 +16,14 @@ pub struct FocusTarget {
 /// The result of a focus attempt. Drives 4.3b notify-suppression.
 #[derive(Debug, PartialEq, Eq)]
 pub enum FocusOutcome {
-    Raised,         // a window was found and raised/highlighted
-    AlreadyFocused, // a window was found but was already focused (4.3a no-op'd it)
-    NotFound,       // backend ran but matched no window
-    Unavailable,    // no usable backend, or the call failed/timed out
+    /// A window was found and raised/highlighted.
+    Raised,
+    /// A window was found but was already focused (4.3a no-op'd it).
+    AlreadyFocused,
+    /// The backend ran but matched no window.
+    NotFound,
+    /// No usable backend, or the call failed/timed out.
+    Unavailable,
 }
 
 pub trait Focuser {
@@ -74,6 +79,39 @@ pub fn focus_suppresses_notify(outcome: &FocusOutcome, force: bool) -> bool {
     !force && *outcome == FocusOutcome::AlreadyFocused
 }
 
+/// Fallback backend: no compositor integration available. Still lets the caller
+/// notify; never spawns anything.
+pub struct NoopFocuser;
+
+impl Focuser for NoopFocuser {
+    fn focus(&self, _target: &FocusTarget) -> FocusOutcome {
+        FocusOutcome::Unavailable
+    }
+    fn focus_detached(&self, _target: &FocusTarget) {}
+}
+
+/// Whether `gdbus` is found on `$PATH`. A pure filesystem scan (no subprocess),
+/// so it's cheap on the notification path, and lets `detect_focuser` avoid even
+/// attempting a gdbus call when the tool isn't installed (spec 4.1).
+fn gdbus_on_path() -> bool {
+    let Ok(path) = std::env::var("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| dir.join("gdbus").is_file())
+}
+
+/// Pick a backend from the environment. GNOME desktop + gdbus → the Shell-
+/// extension backend; anything else → `NoopFocuser` (so the binary never even
+/// attempts a gdbus call into the void). X11/non-GNOME is Phase 5.
+pub fn detect_focuser() -> Box<dyn Focuser> {
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").ok();
+    if should_use_gnome_shell(desktop.as_deref(), gdbus_on_path()) {
+        Box::new(crate::dbus::GnomeShellFocuser)
+    } else {
+        Box::new(NoopFocuser)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,6 +144,12 @@ mod tests {
         );
         assert_eq!(
             parse_focus_outcome("(false, false)\n"),
+            FocusOutcome::NotFound
+        );
+        // The extension never returns found=false with already_focused=true, but
+        // the wildcard arm must still classify it as NotFound (not Unavailable).
+        assert_eq!(
+            parse_focus_outcome("(false, true)\n"),
             FocusOutcome::NotFound
         );
     }
@@ -158,5 +202,16 @@ mod tests {
         ] {
             assert!(!focus_suppresses_notify(&o, false));
         }
+    }
+
+    #[test]
+    fn noop_focuser_is_always_unavailable() {
+        let t = FocusTarget {
+            pid: Some(1),
+            session_marker: None,
+            duration_ms: 0,
+        };
+        assert_eq!(NoopFocuser.focus(&t), FocusOutcome::Unavailable);
+        NoopFocuser.focus_detached(&t); // must not panic
     }
 }
