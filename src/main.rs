@@ -1,6 +1,7 @@
 mod config;
 mod dbus;
 mod doctor;
+mod focus;
 mod notify;
 mod process_tree;
 
@@ -217,13 +218,19 @@ mod tests {
 
     #[test]
     fn version_flag_parses() {
-        assert!(matches!(parse_args(&["--version".to_string()]), Command::Version));
+        assert!(matches!(
+            parse_args(&["--version".to_string()]),
+            Command::Version
+        ));
         assert!(matches!(parse_args(&["-V".to_string()]), Command::Version));
     }
 
     #[test]
     fn doctor_parses() {
-        assert!(matches!(parse_args(&["doctor".to_string()]), Command::Doctor));
+        assert!(matches!(
+            parse_args(&["doctor".to_string()]),
+            Command::Doctor
+        ));
     }
 
     #[test]
@@ -236,7 +243,10 @@ mod tests {
 
     #[test]
     fn test_without_type_parses() {
-        assert!(matches!(parse_args(&["test".to_string()]), Command::Test(None)));
+        assert!(matches!(
+            parse_args(&["test".to_string()]),
+            Command::Test(None)
+        ));
     }
 
     #[test]
