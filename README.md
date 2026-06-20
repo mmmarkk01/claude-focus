@@ -12,6 +12,40 @@ When Claude Code needs input — a permission prompt, a question, or it's waitin
 
 All three behaviors are independently configurable.
 
+## Right window, every time (multiple sessions)
+
+`gnome-terminal` runs every window under one `gnome-terminal-server` process, so
+matching by PID alone can raise the wrong window. claude-focus disambiguates by
+tagging each terminal's title with the Claude session id and matching that:
+
+- A **SessionStart** hook sets the title to `claude · <project> [cf:<id8>]` using
+  Claude Code's `terminalSequence` output (no shell snippet, works over SSH/tmux).
+- The **Notification** hook asks the GNOME extension to raise the window whose
+  title carries the matching `[cf:<id8>]` marker.
+- If no marker is present (you didn't opt in, older Claude Code, or a terminal
+  that already has distinct PIDs), it falls back to PID + most-recently-focused —
+  exactly the previous behavior. **Nothing regresses.**
+
+### Enabling precise matching (opt-in)
+
+The title tag only persists if Claude Code's own dynamic title is off. The
+installer asks; choosing yes sets this in `~/.claude/settings.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1" } }
+```
+
+Trade-off: you lose Claude's task-summary spinner title and get a stable
+`claude · <project> [cf:…]` title instead (which is easier to tell apart in the
+taskbar). To revert, remove that env entry. `claude-focus doctor` reports whether
+the SessionStart hook and this env var are set.
+
+### Skipping redundant alerts
+
+If the matched window is already focused, the extension skips the border/raise,
+and in `mode = both` the banner + sound are suppressed too — no flash or beep for
+the window you're already looking at. `test` always alerts.
+
 ## How It Works
 
 Claude Code supports [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) — shell commands that run in response to lifecycle events. Claude-focus registers itself as a **Notification hook** in `~/.claude/settings.json`. Whenever Claude Code emits a notification event, it pipes a JSON payload to `claude-focus` via stdin.
