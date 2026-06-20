@@ -50,12 +50,33 @@ do_config() {
 }
 
 do_hook() {
-    echo "==> Merging hook into Claude Code settings..."
+    echo "==> Merging hooks into Claude Code settings..."
     mkdir -p "$(dirname "$SETTINGS_FILE")"
-    SETTINGS_FILE="$SETTINGS_FILE" BIN_DIR="$BIN_DIR" python3 - <<'PY'
+
+    # Opt-in: precise multi-window matching needs Claude's dynamic title OFF so
+    # our session-id title tag persists. Prompt only on a real terminal;
+    # non-interactive installs never change the user's Claude behavior.
+    local disable_title=0 ans=""
+    if [ -t 0 ]; then
+        echo ""
+        echo "    Precise multi-window matching tags each terminal's title with the Claude"
+        echo "    session id and matches it. It needs Claude's own dynamic title OFF"
+        echo "    (CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1); your title becomes e.g."
+        echo "    'claude · myproject [cf:1a2b3c4d]'. Without it, claude-focus still works"
+        echo "    but falls back to best-effort PID matching for gnome-terminal windows."
+        # `|| true`: EOF (Ctrl+D) makes read exit non-zero, which under
+        # `set -e` would abort the install half-done — treat it as "default N".
+        read -r -p "    Enable precise window matching? [y/N] " ans || true
+        case "$ans" in [Yy]*) disable_title=1 ;; esac
+    else
+        echo "    (non-interactive: leaving Claude's title untouched; PID fallback in use)"
+    fi
+
+    SETTINGS_FILE="$SETTINGS_FILE" BIN_DIR="$BIN_DIR" DISABLE_TITLE="$disable_title" python3 - <<'PY'
 import json, os, stat, tempfile
 settings_file = os.environ['SETTINGS_FILE']
 hook_command = os.path.join(os.environ['BIN_DIR'], 'claude-focus')
+disable_title = os.environ.get('DISABLE_TITLE') == '1'
 
 settings = {}
 if os.path.exists(settings_file):
@@ -75,17 +96,48 @@ if os.path.exists(settings_file):
             % settings_file
         )
 
-hook_entry = {'matcher': '*', 'hooks': [{'type': 'command', 'command': hook_command}]}
-hooks = settings.setdefault('hooks', {})
-notifications = hooks.setdefault('Notification', [])
-already_present = any(
-    any(h.get('command') == hook_command for h in entry.get('hooks', []))
-    for entry in notifications
-)
-if already_present:
-    print('    Hook already present, skipping')
+changed = False
+
+
+def ensure_hook(event, with_matcher):
+    global changed
+    entries = settings.setdefault('hooks', {}).setdefault(event, [])
+    if not isinstance(entries, list):
+        raise SystemExit(
+            "    ERROR: %s has a non-list hooks.%s.\n"
+            "    Fix it or back it up, then re-run install. Left it untouched."
+            % (settings_file, event)
+        )
+    present = any(
+        any(h.get('command') == hook_command for h in entry.get('hooks', []))
+        for entry in entries
+    )
+    if present:
+        print('    %s hook already present, skipping' % event)
+        return
+    entry = {'hooks': [{'type': 'command', 'command': hook_command}]}
+    if with_matcher:
+        entry['matcher'] = '*'
+    entries.append(entry)
+    print('    %s hook added' % event)
+    changed = True
+
+
+ensure_hook('Notification', True)
+ensure_hook('SessionStart', False)
+
+if disable_title:
+    env = settings.setdefault('env', {})
+    if env.get('CLAUDE_CODE_DISABLE_TERMINAL_TITLE') != '1':
+        env['CLAUDE_CODE_DISABLE_TERMINAL_TITLE'] = '1'
+        print('    Set CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1 (precise window matching enabled)')
+        changed = True
+    else:
+        print('    CLAUDE_CODE_DISABLE_TERMINAL_TITLE already set')
 else:
-    notifications.append(hook_entry)
+    print('    Left Claude title behavior unchanged (precise matching off; PID fallback)')
+
+if changed:
     # Atomic write: temp file in the same dir + os.replace, so a crash never
     # truncates the user's Claude settings.
     d = os.path.dirname(settings_file) or '.'
@@ -102,7 +154,9 @@ else:
         if os.path.exists(tmp):
             os.remove(tmp)
         raise
-    print('    Hook added to', settings_file)
+    print('    Wrote', settings_file)
+else:
+    print('    No settings changes needed')
 PY
 }
 
