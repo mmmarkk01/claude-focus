@@ -16,6 +16,13 @@ const IFACE_XML = `
       <arg type="u" direction="in" name="duration_ms"/>
       <arg type="b" direction="out" name="success"/>
     </method>
+    <method name="HighlightBySession">
+      <arg type="s" direction="in" name="marker"/>
+      <arg type="u" direction="in" name="pid"/>
+      <arg type="u" direction="in" name="duration_ms"/>
+      <arg type="b" direction="out" name="found"/>
+      <arg type="b" direction="out" name="already_focused"/>
+    </method>
   </interface>
 </node>`;
 
@@ -101,6 +108,44 @@ export default class FocusByPidExtension {
 
         this._highlightWindow(win, duration_ms || 3000);
         return true;
+    }
+
+    HighlightBySession(marker, pid, duration_ms) {
+        const win = this._resolveWindow(marker, pid);
+        if (!win) return [false, false];
+
+        // 4.3a: if it's already the focused window, do nothing (no flash).
+        if (global.display.get_focus_window() === win) {
+            return [true, true];
+        }
+
+        const workspace = win.get_workspace();
+        const activeWorkspace = global.workspace_manager.get_active_workspace();
+        if (workspace && workspace !== activeWorkspace) {
+            workspace.activate(global.get_current_time());
+        }
+        Main.activateWindow(win);
+        this._highlightWindow(win, duration_ms || 3000);
+        return [true, false];
+    }
+
+    _resolveWindow(marker, pid) {
+        // 1. Precise: a window whose title carries this session's marker.
+        if (marker) {
+            const tagged = global.get_window_actors()
+                .map(actor => actor.get_meta_window())
+                .filter(win => {
+                    if (!win) return false;
+                    const title = win.get_title();
+                    return title !== null && title.includes(marker);
+                });
+            if (tagged.length > 0) {
+                tagged.sort((a, b) => b.get_user_time() - a.get_user_time());
+                return tagged[0];
+            }
+        }
+        // 2. Fallback: today's PID + most-recently-focused selection.
+        return this._findBestWindowByPid(pid);
     }
 
     _findBestWindowByPid(pid) {

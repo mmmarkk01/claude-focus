@@ -3,5 +3,5 @@
   "name": "Focus By PID",
   "description": "Activate a window by PID via D-Bus, for use with Claude Code auto-focus.",
   "shell-version": ["45", "46", "47", "48"],
-  "version": 1
+  "version": 2
 }
