@@ -132,7 +132,7 @@ mod process_tree;
 
 - [ ] **Step 3: Run the tests to verify they pass**
 
-Run: `cargo test --lib focus::`
+Run: `cargo test focus::`
 Expected: 3 new tests pass; total still compiles. (A `dead_code` warning on the trait/types is expected until later tasks wire them — that's fine for now; do NOT add `#[allow]` blanket-wide.)
 
 - [ ] **Step 4: Commit**
@@ -171,7 +171,7 @@ Add inside `mod tests`:
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cargo test --lib focus::parses_gdbus`
+Run: `cargo test focus::parses_gdbus`
 Expected: FAIL — `parse_focus_outcome` not found.
 
 - [ ] **Step 3: Implement `parse_focus_outcome` in `src/focus.rs`**
@@ -196,7 +196,7 @@ pub fn parse_focus_outcome(stdout: &str) -> FocusOutcome {
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cargo test --lib focus::`
+Run: `cargo test focus::`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -241,7 +241,7 @@ Add inside `mod tests`:
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cargo test --lib focus::gnome`
+Run: `cargo test focus::gnome`
 Expected: FAIL — `should_use_gnome_shell` not found (or arity mismatch).
 
 - [ ] **Step 3: Implement the predicate**
@@ -264,7 +264,7 @@ pub fn should_use_gnome_shell(current_desktop: Option<&str>, gdbus_present: bool
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cargo test --lib focus::`
+Run: `cargo test focus::`
 Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
@@ -302,7 +302,7 @@ Add inside `mod tests`:
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cargo test --lib focus::already_focused`
+Run: `cargo test focus::already_focused`
 Expected: FAIL — `focus_suppresses_notify` not found.
 
 - [ ] **Step 3: Implement**
@@ -319,7 +319,7 @@ pub fn focus_suppresses_notify(outcome: &FocusOutcome, force: bool) -> bool {
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `cargo test --lib focus::`
+Run: `cargo test focus::`
 Expected: PASS (10 tests).
 
 - [ ] **Step 5: Commit**
@@ -459,7 +459,7 @@ impl Focuser for GnomeShellFocuser {
 
 - [ ] **Step 4: Run to verify it compiles and tests pass**
 
-Run: `cargo test --lib`
+Run: `cargo test`
 Expected: PASS. `src/main.rs` still calls the old `dbus::highlight_window` — that is removed in Task 6, so if the build fails here with "cannot find function `highlight_window`", proceed directly to Task 6 (these two tasks form one compile unit). To keep this task self-contained, instead run:
 
 Run: `cargo build 2>&1 | head -5`
@@ -625,7 +625,7 @@ Add inside `src/main.rs`'s `mod tests`:
 
 - [ ] **Step 3: Run to verify they fail**
 
-Run: `cargo test --lib tests::session_start`
+Run: `cargo test tests::session_start`
 Expected: FAIL — builders not found.
 
 - [ ] **Step 4: Implement the builders + `run_session_start` + the `run` branch in `src/main.rs`**
@@ -840,7 +840,7 @@ Add inside `mod tests`:
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `cargo test --lib doctor::`
+Run: `cargo test doctor::`
 Expected: FAIL — `hook_registered_for` and `disable_title_env_set` not found.
 
 - [ ] **Step 3: Generalize `hook_registered` and add `disable_title_env_set`**
@@ -953,7 +953,7 @@ In `doctor::run()`, replace the **final hook-registration block** — the three 
 
 - [ ] **Step 6: Run to verify pass**
 
-Run: `cargo test --lib doctor::`
+Run: `cargo test doctor::`
 Expected: PASS (the original 3 doctor tests + 4 new).
 
 - [ ] **Step 7: Commit**
